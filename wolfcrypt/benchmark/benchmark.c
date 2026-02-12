@@ -1015,6 +1015,40 @@ static word32 bench_other_algs = 0;
 /* Post-Quantum Stateful Hash-Based sig algorithms to benchmark. */
 static word32 bench_pq_hash_sig_algs = 0;
 
+/*NOTE RR Update*/
+/* Enable only what you want to benchmark */
+static void bench_apply_enablelist(void)
+{
+    /* 1) Disable "all" mode so it can't override */
+    bench_all = 0;
+
+    /* 2) Clear everything */
+    bench_cipher_algs = 0;
+    bench_digest_algs = 0;
+    bench_mac_algs = 0;
+    bench_kdf_algs = 0;
+    bench_asym_algs = 0;
+    bench_pq_asym_algs = 0;
+    bench_pq_asym_algs2 = 0;
+    bench_other_algs = 0;
+    bench_pq_hash_sig_algs = 0;
+
+    /* 3) Whitelist selections (edit these lines only) */
+
+    /* Example: bench AES-GCM + SHA-256 + HMAC-SHA256 + RSA */
+    bench_cipher_algs |= BENCH_AES_GCM;     /* adjust to your macro names */
+    bench_digest_algs |= BENCH_SHA256;
+    //bench_mac_algs    |= BENCH_HMAC_SHA256;
+    bench_asym_algs   |= BENCH_RSA;
+
+    /* If you want AES-CBC too: */
+    /* bench_cipher_algs |= BENCH_AES_CBC; */
+
+    /* If you want SHA-384 too: */
+    /* bench_digest_algs |= BENCH_SHA384; */
+}
+
+
 #if !defined(WOLFSSL_BENCHMARK_ALL) && !defined(NO_MAIN_DRIVER)
 
 /* The mapping of command line option to bit values. */
@@ -2718,7 +2752,6 @@ static WC_INLINE int bench_stats_check(double start)
             * 1000000
 #endif
            );
-
     return ret;
 }
 
@@ -3805,10 +3838,13 @@ static void* benchmarks_do(void* args)
     bench_iv = (byte*)bench_iv_buf;
 #endif
 
+/*NOTE RR update*/
+    bench_apply_enablelist();
 #ifndef WC_NO_RNG
     if (bench_all || (bench_other_algs & BENCH_RNG))
         bench_rng();
 #endif /* WC_NO_RNG */
+
 #ifndef NO_AES
 #ifdef HAVE_AES_CBC
     if (bench_all || (bench_cipher_algs & BENCH_AES_CBC)) {
@@ -7414,7 +7450,7 @@ void bench_sha256(int useDeviceID)
     #ifdef MULTI_VALUE_STATISTICS
            || runs < minimum_runs
     #endif
-           );
+           ); 
     }
     else {
         bench_stats_start(&count, &start);
@@ -15671,7 +15707,7 @@ void bench_sphincsKeySign(byte level, byte optim)
 #elif defined(WOLFSSL_IAR_ARM_TIME) || defined (WOLFSSL_MDK_ARM) || \
       defined(WOLFSSL_USER_CURRTIME) || defined(WOLFSSL_CURRTIME_REMAP)
     /* declared above at line 239 */
-    /* extern   double current_time(int reset); */
+    extern   double current_time(int reset);
 
 #elif defined(FREERTOS)
 

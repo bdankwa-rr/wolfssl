@@ -391,8 +391,8 @@ extern "C" {
 //#undef  USE_CERT_BUFFERS_1024
 //#define USE_CERT_BUFFERS_1024
 
-#undef  USE_CERT_BUFFERS_256
-#define USE_CERT_BUFFERS_256
+//#undef  USE_CERT_BUFFERS_256
+//#define USE_CERT_BUFFERS_256
 
 
 /* ------------------------------------------------------------------------- */
@@ -401,7 +401,7 @@ extern "C" {
 
 #undef DEBUG_WOLFSSL
 #undef NO_ERROR_STRINGS
-#if 1
+#if 0
     #define DEBUG_WOLFSSL
 #else
     #if 0
@@ -470,8 +470,8 @@ extern "C" {
 
 /* Override Current Time */
 /* Allows custom "custom_time()" function to be used for benchmark */
-#define WOLFSSL_USER_CURRTIME
-extern double current_time(int reset);
+//#define WOLFSSL_USER_CURRTIME
+//extern double current_time(int reset);
 
 /* ------------------------------------------------------------------------- */
 /* RNG */
@@ -485,7 +485,7 @@ extern unsigned int my_rng_seed_gen(void);
 #define CUSTOM_RAND_GENERATE  my_rng_seed_gen
 
 /* Choose RNG method */
-#if 0 /* RR NOTE - the RANDOM test failes when P-RNG is enabled */
+#if 1 /* RR NOTE - the RANDOM test failes when P-RNG is enabled */
     /* Use built-in P-RNG (SHA256 based) with HW RNG */
     /* P-RNG + HW RNG (P-RNG is ~8K) */
     #undef  HAVE_HASHDRBG
@@ -650,6 +650,8 @@ extern unsigned int my_rng_seed_gen(void);
 #undef  NO_PKCS12
 #define NO_PKCS12
 
+//#undef WOLFSSL_ASYNC_CRYPT
+//#define WC_NO_ASYNC_THREADING   /* optional, belt-and-suspenders */
 
 
 #ifdef __cplusplus

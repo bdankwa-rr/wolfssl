@@ -65,10 +65,10 @@ double current_time(int reset)
     timeNow = (timeMs / 1000); // sec
     timeNow += (double)(timeMs % 1000) / 1000; // ms
     return timeNow;*/
-    uint32_t* timerAddr = (uint32_t*)0x2010002C; //using the LSB 32-bit of the 47-bit counter as the timer for benchmark.
+    uint32_t* timerAddr = (uint32_t*)0x20006020; //using the LSB 32-bit of the 47-bit counter as the timer for benchmark.
     uint32_t timeNowUs = *timerAddr;
  
-    double timeNowMs = (double)timeNowUs / 1000.0; // Convert microseconds to milliseconds
+    double timeNowMs = (double)timeNowUs / 1000000.0; // Convert microseconds to milliseconds
     return timeNowMs;
 }
 #endif
