@@ -1,0 +1,20 @@
+# Project name
+BIN = WolfCryptTest
+STARTUP_SRC ?= ./Source/startup_code
+SRC_C = ./Source/test_main.c
+
+# Add startup code for GR6
+SRC_S  = $(STARTUP_SRC)/startupcode.s
+SRC_S += $(STARTUP_SRC)/project_ident.s
+SRC_S += $(STARTUP_SRC)/ramaddresscheck.s
+SRC_S += $(STARTUP_SRC)/ramclearblock.s
+
+SRC_C += $(STARTUP_SRC)/startup.c
+SRC_C += $(STARTUP_SRC)/error_handler.c
+SRC_C += $(STARTUP_SRC)/interrupt_handler.c
+SRC_C += $(STARTUP_SRC)/user_entry.c
+SRC_C += $(STARTUP_SRC)/wdt_functions.c
+
+all: build_hex
+
+include Makefile.common
