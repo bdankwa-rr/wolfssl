@@ -309,7 +309,6 @@ extern "C" {
     #endif
 #endif
 
-
 /* ------------------------------------------------------------------------- */
 /* Hashing */
 /* ------------------------------------------------------------------------- */
@@ -377,6 +376,13 @@ extern "C" {
     #define WOLFSSL_CMAC
 #endif
 
+/* SHAKE */
+#undef WOLFSSL_SHAKE
+#if 1
+    #define WOLFSSL_SHAKE
+    #define WOLFSSL_SHAKE128
+    #define WOLFSSL_SHAKE256
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* Benchmark / Test */
@@ -650,9 +656,8 @@ extern unsigned int my_rng_seed_gen(void);
 #undef  NO_PKCS12
 #define NO_PKCS12
 
-//#undef WOLFSSL_ASYNC_CRYPT
-//#define WC_NO_ASYNC_THREADING   /* optional, belt-and-suspenders */
-
+#define NO_SM4
+#undef  WOLFSSL_SM4
 
 #ifdef __cplusplus
 }

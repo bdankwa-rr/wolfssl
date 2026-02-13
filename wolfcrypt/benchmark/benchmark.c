@@ -1033,19 +1033,19 @@ static void bench_apply_enablelist(void)
     bench_other_algs = 0;
     bench_pq_hash_sig_algs = 0;
 
-    /* 3) Whitelist selections (edit these lines only) */
+    /* 3) Select primitives*/
 
-    /* Example: bench AES-GCM + SHA-256 + HMAC-SHA256 + RSA */
-    bench_cipher_algs |= BENCH_AES_GCM;     /* adjust to your macro names */
-    bench_digest_algs |= BENCH_SHA256;
-    //bench_mac_algs    |= BENCH_HMAC_SHA256;
+    bench_cipher_algs   |= BENCH_AES_CBC | BENCH_AES_GCM | BENCH_AES_GMAC | BENCH_AES_ECB 
+                        | BENCH_AES_XTS  | BENCH_AES_CFB | BENCH_AES_OFB  | BENCH_AES_CTR
+                        | BENCH_AES_CCM  | BENCH_AES_SIV | BENCH_CAMELLIA | BENCH_ARC4
+                        | BENCH_CHACHA20 | BENCH_DES     | BENCH_ASCON_AEAD128 |BENCH_CHACHA20_POLY1305;
+    bench_digest_algs   |= BENCH_MD5     | BENCH_POLY1305 | BENCH_SHA | BENCH_SHA2 |BENCH_SHA224
+                        | BENCH_SHA256   | BENCH_SHA384  | BENCH_SHA512 | BENCH_SHA3
+                        | BENCH_SHA3_224 | BENCH_SHA3_256  | BENCH_SHA3_384 | BENCH_SHA3_512
+                        | BENCH_SHAKE128 | BENCH_SHAKE256  | BENCH_RIPEMD   | BENCH_BLAKE2B
+                        | BENCH_BLAKE2S;
+    bench_mac_algs    |= BENCH_HMAC_SHA256;
     bench_asym_algs   |= BENCH_RSA;
-
-    /* If you want AES-CBC too: */
-    /* bench_cipher_algs |= BENCH_AES_CBC; */
-
-    /* If you want SHA-384 too: */
-    /* bench_digest_algs |= BENCH_SHA384; */
 }
 
 
