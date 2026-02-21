@@ -2,10 +2,11 @@
 CMD_ECHO =
 
 # Important directories
+TOOLCHAINPATH = ../../../phantom/compilers/visium
 BUILD_DIR = ./Build
 
 # Toolchain location and prefix
-TOOLCHAIN ?= /home/bdankwa/opt/cross/visium/bin/visium-elf-
+TOOLCHAIN ?= $(TOOLCHAINPATH)/opt/cross/bin/visium-elf-
 NEWLIB_STUB_LOC ?= ./Source/startup_code
 
 # Tools selection
@@ -41,7 +42,7 @@ LDFLAGS ?= $(ARCHFLAGS)
 
 FIPS?=0
 # LD: Link with nosys
-LDFLAGS += -T ./target_box_unit_gr6.ld #-L/home/bdankwa/opt/cross/visium/lib/gcc/visium-elf/14.2.0
+LDFLAGS += -T ./target_box_unit_gr6.ld 
 
 # LD: Link with nano or rdimon implementation for standard library
 # LDFLAGS += --specs=nano.specs
