@@ -1044,10 +1044,13 @@ static void bench_apply_enablelist(void)
                         | BENCH_SHA3_224 | BENCH_SHA3_256  | BENCH_SHA3_384 | BENCH_SHA3_512
                         | BENCH_SHAKE128 | BENCH_SHAKE256  | BENCH_RIPEMD   | BENCH_BLAKE2B
                         | BENCH_BLAKE2S;
-    bench_mac_algs    |= BENCH_HMAC_SHA256;
-    bench_asym_algs   |= BENCH_RSA;
+    bench_mac_algs      |= BENCH_HMAC | BENCH_HMAC_MD5 | BENCH_HMAC_SHA256 | BENCH_HMAC_SHA384 
+                        | BENCH_HMAC_SHA512 | BENCH_CMAC;
+    bench_asym_algs     |= BENCH_RSA | BENCH_DH | BENCH_CURVE25519_KEYGEN | BENCH_CURVE25519_KA
+                        | BENCH_ED25519_KEYGEN | BENCH_ED25519_SIGN;
+    //bench_pq_asym_algs  |= BENCH_KYBER | BENCH_KYBER512 | BENCH_KYBER768 | BENCH_KYBER1024
+     //                   | BENCH_DILITHIUM_LEVEL2_SIGN | BENCH_DILITHIUM_LEVEL3_SIGN | BENCH_DILITHIUM_LEVEL5_SIGN;
 }
-
 
 #if !defined(WOLFSSL_BENCHMARK_ALL) && !defined(NO_MAIN_DRIVER)
 

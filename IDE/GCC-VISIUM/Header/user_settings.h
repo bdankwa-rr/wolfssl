@@ -151,7 +151,7 @@ extern "C" {
 
 /* ECC */
 #undef HAVE_ECC
-#if 0 /* RR NOTE - ECC cannot be enabled if WOLFSSL_STATIC_MEMORY is enabled */
+#if 0 /* RR NOTE - ECC requires malloc and cannot be enabled if WOLFSSL_STATIC_MEMORY is enabled */
     #define HAVE_ECC
 
     /* Manually define enabled curves */
@@ -554,8 +554,20 @@ extern unsigned int my_rng_seed_gen(void);
 #endif
 
 #undef WOLFSSL_KEY_GEN
-#if 0
+#if 1
     #define WOLFSSL_KEY_GEN
+#endif
+
+#undef WOLFSSL_HAVE_MLKEM
+#if 1
+    #define WOLFSSL_HAVE_MLKEM
+    #define WOLFSSL_WC_MLKEM
+#endif
+
+#undef HAVE_DILITHIUM
+#if 1
+    #define HAVE_DILITHIUM
+    #define WOLFSSL_WC_DILITHIUM
 #endif
 
 #if defined(HAVE_FIPS) && !defined(WOLFSSL_KEY_GEN)
