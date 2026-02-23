@@ -773,6 +773,11 @@ static WC_INLINE void bench_append_memory_info(char* buffer, size_t size,
 
 #ifdef WOLFSSL_STATIC_MEMORY
     static WOLFSSL_HEAP_HINT* HEAP_HINT;
+    /*NOTE RR: This function is called from benchmark_main.c to set the HEAP_HINT*/
+    WOLFSSL_API void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint)
+    {
+        HEAP_HINT = hint;
+    }
 #else
     #define HEAP_HINT NULL
 #endif /* WOLFSSL_STATIC_MEMORY */
@@ -1048,8 +1053,8 @@ static void bench_apply_enablelist(void)
                         | BENCH_HMAC_SHA512 | BENCH_CMAC;
     bench_asym_algs     |= BENCH_RSA | BENCH_DH | BENCH_CURVE25519_KEYGEN | BENCH_CURVE25519_KA
                         | BENCH_ED25519_KEYGEN | BENCH_ED25519_SIGN;
-    //bench_pq_asym_algs  |= BENCH_KYBER | BENCH_KYBER512 | BENCH_KYBER768 | BENCH_KYBER1024
-     //                   | BENCH_DILITHIUM_LEVEL2_SIGN | BENCH_DILITHIUM_LEVEL3_SIGN | BENCH_DILITHIUM_LEVEL5_SIGN;
+    bench_pq_asym_algs  |= BENCH_KYBER | BENCH_KYBER512 | BENCH_KYBER768 | BENCH_KYBER1024
+                        | BENCH_DILITHIUM_LEVEL2_SIGN | BENCH_DILITHIUM_LEVEL3_SIGN | BENCH_DILITHIUM_LEVEL5_SIGN;
 }
 
 #if !defined(WOLFSSL_BENCHMARK_ALL) && !defined(NO_MAIN_DRIVER)

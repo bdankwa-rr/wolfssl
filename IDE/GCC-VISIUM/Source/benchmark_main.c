@@ -27,15 +27,18 @@
 
 /*************************************************************************************
 NOTE RR: With WOLFSSL_STATIC_MEMORY defined, wolfSSL/wolfCrypt uses static memory pools, 
-not malloc, and RSA will request large chunks (big-int buffers). 
+not malloc, and RSA and PQC primitives request large chunks (big-int buffers). 
 If the pools aren’t sized/initialized for those request types, 
 RSA fails with "out of memory error".
 
-Static memory pool has to be initialized using wc_LoadStaticMemory()
-before calling Wolfcrypt tests.
+Static memory pool has to be initialized using wc_LoadStaticMemory() and pool exported
+to benchmark.c by calling wc_benchmark_set_heap_hint() defined in benchmark.c.
 */
-static unsigned char gHeap[256* 1024];
+#ifdef WOLFSSL_STATIC_MEMORY
+static unsigned char gHeap[1024* 1024];
 static WOLFSSL_HEAP_HINT* gHeapHint = NULL;
+extern void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint);
+#endif
 /**********************************************************************************/
 
 #ifndef NO_CRYPT_BENCHMARK
@@ -53,7 +56,11 @@ int main(void)
     int ret;
 #ifndef NO_CRYPT_BENCHMARK
     wolfCrypt_Init();
+    #ifdef WOLFSSL_STATIC_MEMORY
     ret = wc_LoadStaticMemory(&gHeapHint, gHeap, sizeof(gHeap), 0, 0);
+    if (ret != 0) { printf("Benchmark Test: wc_LoadStaticMemory failed %d\n", ret);}
+    wc_benchmark_set_heap_hint(gHeapHint);
+    #endif
     printf("\nBenchmark Test\n");
     benchmark_test(&args);
     ret = args.return_code;
