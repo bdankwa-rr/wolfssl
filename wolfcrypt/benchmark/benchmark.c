@@ -15316,7 +15316,7 @@ void bench_dilithiumKeySign(byte level)
         for (i = 0; i < agreeTimes; i++) {
             ret = wc_dilithium_make_key(key, GLOBAL_RNG);
             if (ret != 0) {
-                printf("wc_dilithium_import_private_key failed %d\n", ret);
+                printf("wc_dilithium_import_private_key failed %d\n", ret);                
                 goto out;
             }
         }

@@ -444,8 +444,10 @@ extern "C" {
 
     /* Disable fallback malloc/free */
     #define WOLFSSL_NO_MALLOC
-    #if 1
+    #if 0
         #define WOLFSSL_MALLOC_CHECK /* trap malloc failure */
+        #define WOLFSSL_STATIC_MEMORY_DEBUG_CALLBACK
+        #define WOLFSSL_DEBUG_STATIC_MEMORY
     #endif
 #endif
 
@@ -595,6 +597,11 @@ extern unsigned int my_rng_seed_gen(void);
 #else
     #define NO_SESSION_CACHE
 #endif
+
+#define LARGEST_MEM_BUCKET 131072 /* Dilithium full mem     */
+#define WOLFSSL_DILITHIUM_MAKE_KEY_SMALL_MEM 
+#define WOLFSSL_STATIC_MEMORY_TEST_SZ (1024 * 1024)
+#define WC_LMS_PARM_L1_H15_W2
 
 /* ------------------------------------------------------------------------- */
 /* Disable Features */

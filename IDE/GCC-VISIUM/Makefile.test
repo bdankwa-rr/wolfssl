@@ -14,6 +14,7 @@ SRC_C += $(STARTUP_SRC)/error_handler.c
 SRC_C += $(STARTUP_SRC)/interrupt_handler.c
 SRC_C += $(STARTUP_SRC)/user_entry.c
 SRC_C += $(STARTUP_SRC)/wdt_functions.c
+SRC_C += $(STARTUP_SRC)/uart_driver.c
 
 all: build_hex
 

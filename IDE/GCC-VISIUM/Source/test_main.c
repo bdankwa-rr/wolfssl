@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <wolfssl/wolfcrypt/memory.h>
 
+#include "uart_driver.h"
+
 /*************************************************************************************
 NOTE RR: With WOLFSSL_STATIC_MEMORY defined, wolfSSL/wolfCrypt uses static memory pools, 
 not malloc, and RSA will request large chunks (big-int buffers). 
@@ -54,6 +56,7 @@ int main(void)
 {
     int ret;
 #ifndef NO_CRYPT_TEST
+    UART_init();
     wolfCrypt_Init();
     ret = wc_LoadStaticMemory(&gHeapHint, gHeap, sizeof(gHeap), 0, 0);
     if (ret != 0) {

@@ -12,40 +12,34 @@
  #include <sys/unistd.h>
  #include <sys/types.h>
 
- static volatile unsigned *const UART_Control_Reg = (unsigned *) 0x20003918;
- static volatile unsigned *const tp_tx_fifo_buf   = (unsigned *) 0x2000391C;
- static volatile unsigned *const tp_tx_qs         = (unsigned *) 0x20003924;
+ #include "uart_driver.h"
 
- int fstat(int file, struct stat *st) {
+int fstat(int file, struct stat *st) {
     return 0;
  }
 
- int isatty(int file) {
+int isatty(int file) {
     return 1;
  }
 
- off_t lseek (int __fildes, off_t __offset, int __whence ) {
+off_t lseek (int __fildes, off_t __offset, int __whence ) {
     return 0;
  }
 
- int read (int __fd, void *__buf, size_t __nbyte ) {
+int read (int __fd, void *__buf, size_t __nbyte ) {
     return 0;
  }
 
- static inline int tx_fifo_can_accept(void) {
-    // TODO: read your UART status register and return 1 if TX FIFO not full
-    return (*tp_tx_qs == 0x40)? 0 : 1;
- }
-
- int write (int __fd, const void *__buf, size_t __nbyte ) {
+int write (int __fd, const void *__buf, size_t __nbyte ) {
    (void)__fd;
    const uint8_t *buf = (const uint8_t *)__buf;
 
    for (size_t i = 0; i < __nbyte; i++) {
-      while (!tx_fifo_can_accept()) {
+      while (!UART_tx_fifo_can_accept()) {
             __asm__ volatile ("nop");
       }
-      *(volatile uint8_t *)tp_tx_fifo_buf = buf[i];
+      //*(volatile uint8_t *)tp_tx_fifo_buf = buf[i];
+      UART_tx_byte(buf[i]);
    }
    return (int)__nbyte;
    

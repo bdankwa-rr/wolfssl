@@ -194,7 +194,7 @@ SRC_C += ../../wolfcrypt/src/wc_mlkem_poly.c
 SRC_C += ../../wolfcrypt/src/dilithium.c
 # SRC_C += ../../wolfcrypt/src/ext_mlkem.c   # enable if needed
 
-# Add newlib stubs
+# Add Newlib stubs
 SRC_C += $(NEWLIB_STUB_LOC)/newlib_stubs.c
 
 FILENAMES_C = $(notdir $(SRC_C))

@@ -25,6 +25,8 @@
 #include <wolfcrypt/benchmark/benchmark.h>
 #include <stdio.h>
 
+#include "uart_driver.h"
+
 /*************************************************************************************
 NOTE RR: With WOLFSSL_STATIC_MEMORY defined, wolfSSL/wolfCrypt uses static memory pools, 
 not malloc, and RSA and PQC primitives request large chunks (big-int buffers). 
@@ -38,6 +40,15 @@ to benchmark.c by calling wc_benchmark_set_heap_hint() defined in benchmark.c.
 static unsigned char gHeap[1024* 1024];
 static WOLFSSL_HEAP_HINT* gHeapHint = NULL;
 extern void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint);
+#ifdef WOLFSSL_STATIC_MEMORY_DEBUG_CALLBACK
+    extern void wolfSSL_SetDebugMemoryCb(DebugMemoryCb cb);
+    void static_memory_debug_cb(word32 reqSz, word32 buckSz, word16 state, word16 type){
+        printf("MEMORY DEBUG reqSz = %d\n", reqSz);
+        printf("MEMORY DEBUG buckSz = %d\n", buckSz);
+        printf("MEMORY DEBUG state = %d\n", state);
+        printf("MEMORY DEBUG type = %d\n", type);
+    }
+#endif
 #endif
 /**********************************************************************************/
 
@@ -55,11 +66,16 @@ int main(void)
 {
     int ret;
 #ifndef NO_CRYPT_BENCHMARK
+    UART_init();
     wolfCrypt_Init();
     #ifdef WOLFSSL_STATIC_MEMORY
     ret = wc_LoadStaticMemory(&gHeapHint, gHeap, sizeof(gHeap), 0, 0);
+    wolfSSL_SetGlobalHeapHint(gHeap);
     if (ret != 0) { printf("Benchmark Test: wc_LoadStaticMemory failed %d\n", ret);}
     wc_benchmark_set_heap_hint(gHeapHint);
+    #ifdef WOLFSSL_STATIC_MEMORY_DEBUG_CALLBACK
+        wolfSSL_SetDebugMemoryCb((DebugMemoryCb)static_memory_debug_cb);
+    #endif
     #endif
     printf("\nBenchmark Test\n");
     benchmark_test(&args);
