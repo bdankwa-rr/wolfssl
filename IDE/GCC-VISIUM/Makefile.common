@@ -193,6 +193,10 @@ SRC_C += ../../wolfcrypt/src/wc_mlkem.c
 SRC_C += ../../wolfcrypt/src/wc_mlkem_poly.c
 SRC_C += ../../wolfcrypt/src/dilithium.c
 # SRC_C += ../../wolfcrypt/src/ext_mlkem.c   # enable if needed
+SRC_C += ../../wolfcrypt/src/wc_lms.c
+SRC_C += ../../wolfcrypt/src/wc_lms_impl.c
+SRC_C += ../../wolfcrypt/src/wc_xmss.c
+SRC_C += ../../wolfcrypt/src/wc_xmss_impl.c
 
 # Add Newlib stubs
 SRC_C += $(NEWLIB_STUB_LOC)/newlib_stubs.c

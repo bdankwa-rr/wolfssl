@@ -1055,6 +1055,7 @@ static void bench_apply_enablelist(void)
                         | BENCH_ED25519_KEYGEN | BENCH_ED25519_SIGN;
     bench_pq_asym_algs  |= BENCH_KYBER | BENCH_KYBER512 | BENCH_KYBER768 | BENCH_KYBER1024
                         | BENCH_DILITHIUM_LEVEL2_SIGN | BENCH_DILITHIUM_LEVEL3_SIGN | BENCH_DILITHIUM_LEVEL5_SIGN;
+    bench_pq_hash_sig_algs  |= BENCH_LMS_HSS ;
 }
 
 #if !defined(WOLFSSL_BENCHMARK_ALL) && !defined(NO_MAIN_DRIVER)
@@ -15298,10 +15299,10 @@ void bench_dilithiumKeySign(byte level)
         msg[i] = (byte)i;
     }
 #endif
-
-    ret = wc_dilithium_init(key);
+/*NOTE: RR Manually added Jabob's pull request*/
+    ret = wc_dilithium_init_ex(key, HEAP_HINT, devId);
     if (ret != 0) {
-        printf("wc_dilithium_init failed %d\n", ret);
+        printf("wc_dilithium_init_ex failed %d\n", ret);
         goto out;
     }
 

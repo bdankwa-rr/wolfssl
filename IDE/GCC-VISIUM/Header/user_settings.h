@@ -550,6 +550,9 @@ extern unsigned int my_rng_seed_gen(void);
 /* ------------------------------------------------------------------------- */
 /* Enable Features */
 /* ------------------------------------------------------------------------- */
+#define WOLFSSL_STATIC_MEMORY_TEST_SZ (256 * 1024)
+//#define LARGEST_MEM_BUCKET 131072 
+
 #undef WOLFSSL_TLS13
 #if 1
     #define WOLFSSL_TLS13
@@ -569,7 +572,41 @@ extern unsigned int my_rng_seed_gen(void);
 #undef HAVE_DILITHIUM
 #if 1
     #define HAVE_DILITHIUM
-    #define WOLFSSL_WC_DILITHIUM
+    #define WOLFSSL_WC_DILITHIUM    
+    #define WOLFSSL_DILITHIUM_MAKE_KEY_SMALL_MEM 
+#endif
+
+#undef WOLFSSL_HAVE_LMS
+#if 1
+    #define WOLFSSL_HAVE_LMS
+    #define WOLFSSL_WC_LMS
+    #ifndef LMS_LEVEL
+        #define LMS_LEVEL 2
+    #endif
+    #ifndef LMS_HEIGHT
+        #define LMS_HEIGHT 10
+    #endif
+    #ifndef LMS_WINTERNITZ
+        #define LMS_WINTERNITZ 8
+    #endif
+#endif
+
+#undef WOLFSSL_HAVE_XMSS
+#if 1
+    #define WOLFSSL_HAVE_XMSS
+    #define WOLFSSL_WC_XMSS
+
+    #ifndef XMSS_LEVEL
+        #define XMSS_LEVEL 2
+    #endif
+
+    #ifndef XMSS_HEIGHT
+        #define XMSS_HEIGHT 10
+    #endif
+
+    #ifndef XMSS_WINTERNITZ
+        #define XMSS_WINTERNITZ 16
+    #endif
 #endif
 
 #if defined(HAVE_FIPS) && !defined(WOLFSSL_KEY_GEN)
@@ -597,11 +634,6 @@ extern unsigned int my_rng_seed_gen(void);
 #else
     #define NO_SESSION_CACHE
 #endif
-
-#define LARGEST_MEM_BUCKET 131072 /* Dilithium full mem     */
-#define WOLFSSL_DILITHIUM_MAKE_KEY_SMALL_MEM 
-#define WOLFSSL_STATIC_MEMORY_TEST_SZ (1024 * 1024)
-#define WC_LMS_PARM_L1_H15_W2
 
 /* ------------------------------------------------------------------------- */
 /* Disable Features */

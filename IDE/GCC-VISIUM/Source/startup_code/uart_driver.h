@@ -10,6 +10,9 @@
 #define UART_BAUD_RATE_921600   0b110
 #define UART_BAUD_RATE_4615385  0b111
 
+#define DELAY_TIME  100
+
 void UART_init();
+void delay(u_int32_t time);
 int UART_tx_byte(uint8_t out_byte);
-int UART_tx_fifo_can_accept(void); 
+int UART_tx_fifo_full(void); 

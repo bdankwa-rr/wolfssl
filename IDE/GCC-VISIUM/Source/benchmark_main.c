@@ -36,8 +36,9 @@ RSA fails with "out of memory error".
 Static memory pool has to be initialized using wc_LoadStaticMemory() and pool exported
 to benchmark.c by calling wc_benchmark_set_heap_hint() defined in benchmark.c.
 */
+
 #ifdef WOLFSSL_STATIC_MEMORY
-static unsigned char gHeap[1024* 1024];
+/*static unsigned char gHeap[512* 1024];
 static WOLFSSL_HEAP_HINT* gHeapHint = NULL;
 extern void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint);
 #ifdef WOLFSSL_STATIC_MEMORY_DEBUG_CALLBACK
@@ -48,7 +49,7 @@ extern void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint);
         printf("MEMORY DEBUG state = %d\n", state);
         printf("MEMORY DEBUG type = %d\n", type);
     }
-#endif
+#endif*/
 #endif
 /**********************************************************************************/
 
@@ -68,7 +69,7 @@ int main(void)
 #ifndef NO_CRYPT_BENCHMARK
     UART_init();
     wolfCrypt_Init();
-    #ifdef WOLFSSL_STATIC_MEMORY
+    /*#ifdef WOLFSSL_STATIC_MEMORY
     ret = wc_LoadStaticMemory(&gHeapHint, gHeap, sizeof(gHeap), 0, 0);
     wolfSSL_SetGlobalHeapHint(gHeap);
     if (ret != 0) { printf("Benchmark Test: wc_LoadStaticMemory failed %d\n", ret);}
@@ -76,7 +77,7 @@ int main(void)
     #ifdef WOLFSSL_STATIC_MEMORY_DEBUG_CALLBACK
         wolfSSL_SetDebugMemoryCb((DebugMemoryCb)static_memory_debug_cb);
     #endif
-    #endif
+    #endif*/
     printf("\nBenchmark Test\n");
     benchmark_test(&args);
     ret = args.return_code;

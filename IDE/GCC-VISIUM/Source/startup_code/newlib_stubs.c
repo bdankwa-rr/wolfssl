@@ -35,11 +35,11 @@ int write (int __fd, const void *__buf, size_t __nbyte ) {
    const uint8_t *buf = (const uint8_t *)__buf;
 
    for (size_t i = 0; i < __nbyte; i++) {
-      while (!UART_tx_fifo_can_accept()) {
+      while (UART_tx_fifo_full()) {
             __asm__ volatile ("nop");
       }
-      //*(volatile uint8_t *)tp_tx_fifo_buf = buf[i];
-      UART_tx_byte(buf[i]);
+      UART_tx_byte(buf[i]);    
+      delay(DELAY_TIME); 
    }
    return (int)__nbyte;
    
