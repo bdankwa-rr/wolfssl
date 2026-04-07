@@ -1,6 +1,6 @@
 /* sniffer.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -2146,8 +2146,13 @@ static int CheckIp6Hdr(Ip6Hdr* iphdr, IpInfo* info, int length, char* error)
             exthdrsz += hdrsz;
             exthdr = (Ip6ExtHdr*)((byte*)exthdr + hdrsz);
         }
-        while (exthdr->next_header != TCP_PROTOCOL &&
+        while (exthdrsz < length &&
+                exthdr->next_header != TCP_PROTOCOL &&
                 exthdr->next_header != NO_NEXT_HEADER);
+        if (exthdrsz >= length) {
+            SetError(PACKET_HDR_SHORT_STR, error, NULL, 0);
+            return WOLFSSL_FATAL_ERROR;
+        }
     }
 
 #ifndef WOLFSSL_SNIFFER_WATCH
@@ -3473,7 +3478,7 @@ static int ProcessSessionTicket(const byte* input, int* sslBytes,
     /* TLS v1.3 has hint age and nonce */
     if (IsAtLeastTLSv1_3(ssl->version)) {
         /* make sure can read through hint age and nonce len */
-        if (TICKET_HINT_AGE_LEN + 1 > *sslBytes) {
+        if (TICKET_HINT_AGE_LEN + OPAQUE8_LEN > *sslBytes) {
             SetError(BAD_INPUT_STR, error, session, FATAL_ERROR_STATE);
             return WOLFSSL_FATAL_ERROR;
         }
@@ -3482,7 +3487,7 @@ static int ProcessSessionTicket(const byte* input, int* sslBytes,
 
         /* ticket nonce */
         len = input[0];
-        if (len > MAX_TICKET_NONCE_STATIC_SZ) {
+        if (len > MAX_TICKET_NONCE_STATIC_SZ || len + OPAQUE8_LEN > *sslBytes) {
             SetError(BAD_INPUT_STR, error, session, FATAL_ERROR_STATE);
             return WOLFSSL_FATAL_ERROR;
         }
@@ -3842,6 +3847,11 @@ static int ProcessServerHello(int msgSz, const byte* input, int* sslBytes,
             case EXT_MAX_FRAGMENT_LENGTH:
             {
                 word16 max_fragment = MAX_RECORD_SIZE;
+                if (extLen != 1) {
+                    SetError(SERVER_HELLO_INPUT_STR, error, session,
+                             FATAL_ERROR_STATE);
+                    return WOLFSSL_FATAL_ERROR;
+                }
                 switch (input[0]) {
                     case WOLFSSL_MFL_2_8 : max_fragment =  256; break;
                     case WOLFSSL_MFL_2_9 : max_fragment =  512; break;
@@ -3857,6 +3867,11 @@ static int ProcessServerHello(int msgSz, const byte* input, int* sslBytes,
             }
         #endif
             case EXT_SUPPORTED_VERSIONS:
+                if (extLen != 2) {
+                    SetError(SERVER_HELLO_INPUT_STR, error, session,
+                             FATAL_ERROR_STATE);
+                    return WOLFSSL_FATAL_ERROR;
+                }
                 session->sslServer->version.major = input[0];
                 session->sslServer->version.minor = input[1];
                 session->sslClient->version.major = input[0];
@@ -4238,7 +4253,7 @@ static int ProcessClientHello(const byte* input, int* sslBytes,
             const byte *identity, *binders;
 
             idsLen = (word16)((input[idx] << 8) | input[idx+1]);
-            if (idsLen + OPAQUE16_LEN + idx > extLen) {
+            if ((word32)idsLen + OPAQUE16_LEN + idx > (word32)extLen) {
                 SetError(CLIENT_HELLO_INPUT_STR, error, session, FATAL_ERROR_STATE);
                 return WOLFSSL_FATAL_ERROR;
             }
@@ -4246,7 +4261,7 @@ static int ProcessClientHello(const byte* input, int* sslBytes,
 
             /* PSK identity */
             idLen = (word16)((input[idx] << 8) | input[idx+1]);
-            if (idLen + OPAQUE16_LEN + idx > extLen) {
+            if ((word32)idLen + OPAQUE16_LEN + idx > (word32)extLen) {
                 SetError(CLIENT_HELLO_INPUT_STR, error, session, FATAL_ERROR_STATE);
                 return WOLFSSL_FATAL_ERROR;
             }
@@ -4255,14 +4270,22 @@ static int ProcessClientHello(const byte* input, int* sslBytes,
             idx += idLen;
 
             /* Obfuscated Ticket Age 32-bits */
+            if ((word32)idx + OPAQUE32_LEN > (word32)extLen) {
+                SetError(CLIENT_HELLO_INPUT_STR, error, session, FATAL_ERROR_STATE);
+                return WOLFSSL_FATAL_ERROR;
+            }
             ticketAge = (word32)((input[idx] << 24) | (input[idx+1] << 16) |
                                  (input[idx+2] << 8) | input[idx+3]);
             (void)ticketAge; /* not used */
             idx += OPAQUE32_LEN;
 
             /* binders - all binders */
+            if ((word32)idx + OPAQUE16_LEN > (word32)extLen) {
+                SetError(CLIENT_HELLO_INPUT_STR, error, session, FATAL_ERROR_STATE);
+                return WOLFSSL_FATAL_ERROR;
+            }
             bindersLen = (word16)((input[idx] << 8) | input[idx+1]);
-            if (bindersLen + OPAQUE16_LEN + idx > extLen) {
+            if ((word32)bindersLen + OPAQUE16_LEN + idx > (word32)extLen) {
                 SetError(CLIENT_HELLO_INPUT_STR, error, session, FATAL_ERROR_STATE);
                 return WOLFSSL_FATAL_ERROR;
             }
@@ -4571,6 +4594,10 @@ static int DoHandShake(const byte* input, int* sslBytes,
 
 #ifdef HAVE_MAX_FRAGMENT
     if (session->tlsFragBuf) {
+        if (session->tlsFragOffset + rhSize > session->tlsFragSize) {
+            SetError(HANDSHAKE_INPUT_STR, error, session, FATAL_ERROR_STATE);
+            return WOLFSSL_FATAL_ERROR;
+        }
         XMEMCPY(session->tlsFragBuf + session->tlsFragOffset, input, rhSize);
         session->tlsFragOffset += rhSize;
         *sslBytes -= rhSize;
@@ -4625,6 +4652,10 @@ static int DoHandShake(const byte* input, int* sslBytes,
             *sslBytes += HANDSHAKE_HEADER_SZ;
         }
 
+        if (session->tlsFragOffset + rhSize > session->tlsFragSize) {
+            SetError(HANDSHAKE_INPUT_STR, error, session, FATAL_ERROR_STATE);
+            return WOLFSSL_FATAL_ERROR;
+        }
         XMEMCPY(session->tlsFragBuf + session->tlsFragOffset, input, rhSize);
         session->tlsFragOffset += rhSize;
         *sslBytes -= rhSize;
@@ -5053,7 +5084,7 @@ static const byte* DecryptMessage(WOLFSSL* ssl, const byte* input, word32 sz,
 
 #ifdef WOLFSSL_TLS13
     if (IsAtLeastTLSv1_3(ssl->version)) {
-        if (sz < ssl->specs.aead_mac_size) {
+        if (sz <= ssl->specs.aead_mac_size) {
             *error = BUFFER_ERROR;
             return NULL;
         }
@@ -5110,6 +5141,10 @@ static const byte* DecryptMessage(WOLFSSL* ssl, const byte* input, word32 sz,
 #ifdef WOLFSSL_TLS13
     if (IsAtLeastTLSv1_3(ssl->version)) {
         word16 i = (word16)(sz - ssl->keys.padSz);
+        if (i == 0) {
+            *error = BUFFER_ERROR;
+            return NULL;
+        }
         /* Remove padding from end of plain text. */
         for (--i; i > 0; i--) {
             if (output[i] != 0)
@@ -5231,6 +5266,7 @@ static SnifferSession* CreateSession(IpInfo* ipInfo, TcpInfo* tcpInfo,
         }
         if (HashInit(newHash) != 0) {
             SetError(EXTENDED_MASTER_HASH_STR, error, NULL, 0);
+            XFREE(newHash, NULL, DYNAMIC_TYPE_HASHES);
             XFREE(session, NULL, DYNAMIC_TYPE_SNIFFER_SESSION);
             return NULL;
         }
@@ -5484,6 +5520,12 @@ static int CheckHeaders(IpInfo* ipInfo, TcpInfo* tcpInfo, const byte* packet,
      * data after the IP record for the FCS for Ethernet. */
     *sslBytes = (int)(packet + ipInfo->total - *sslFrame);
 
+    /* Ensure sslBytes does not exceed the actual size. */
+    if (*sslBytes > (int)(length - (ipInfo->length + tcpInfo->length))) {
+        SetError(PACKET_HDR_SHORT_STR, error, NULL, 0);
+        return WOLFSSL_FATAL_ERROR;
+    }
+
     (void)checkReg;
 
     return 0;
@@ -5622,7 +5664,7 @@ static int AddToReassembly(byte from, word32 seq, const byte* sslFrame,
         if (end >= curr->begin)
             end = curr->begin - 1;
 
-        if (MaxRecoveryMemory -1 &&
+        if (MaxRecoveryMemory != -1 &&
                       (int)(*reassemblyMemory + sslBytes) > MaxRecoveryMemory) {
             SetError(REASSEMBLY_MAX_STR, error, session, FATAL_ERROR_STATE);
             return WOLFSSL_FATAL_ERROR;
@@ -6678,12 +6720,21 @@ static int ssl_DecodePacketInternal(const byte* packet, int length, int isChain,
 #ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
         struct iovec* chain;
         word32 i;
+        size_t totalLength;
 
         word32 chainSz = (word32)length;
 
         chain = (struct iovec*)packet;
-        length = 0;
-        for (i = 0; i < chainSz; i++) length += chain[i].iov_len;
+        totalLength = 0;
+        for (i = 0; i < chainSz; i++) {
+            size_t prev = totalLength;
+            totalLength += chain[i].iov_len;
+            if (totalLength < prev || totalLength > (size_t)INT_MAX) {
+                SetError(BAD_INPUT_STR, error, session, FATAL_ERROR_STATE);
+                return WOLFSSL_SNIFFER_ERROR;
+            }
+        }
+        length = (int)totalLength;
 
         tmpPacket = (byte*)XMALLOC(length, NULL, DYNAMIC_TYPE_SNIFFER_CHAIN_BUFFER);
         if (tmpPacket == NULL) return MEMORY_E;
@@ -6691,7 +6742,7 @@ static int ssl_DecodePacketInternal(const byte* packet, int length, int isChain,
         length = 0;
         for (i = 0; i < chainSz; i++) {
             XMEMCPY(tmpPacket+length,chain[i].iov_base,chain[i].iov_len);
-            length += chain[i].iov_len;
+            length += (int)chain[i].iov_len;
         }
         packet = (const byte*)tmpPacket;
 #else

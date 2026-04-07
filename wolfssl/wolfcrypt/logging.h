@@ -1,6 +1,6 @@
 /* logging.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -577,6 +577,11 @@ WOLFSSL_API void wolfSSL_SetLoggingPrefix(const char* prefix);
 #endif
 #if defined(WOLFSSL_DEBUG_ERRORS_ONLY) && defined(WOLFSSL_DEBUG_CERTS)
     #error "Failed: Cannot WOLFSSL_DEBUG_CERTS with WOLFSSL_DEBUG_ERRORS_ONLY"
+#endif
+
+#ifdef WOLFSSL_DEBUG_TRACE_ERROR_CODES
+    WOLFSSL_API int wc_debug_trace_error_codes_enabled(void);
+    WOLFSSL_API int wc_debug_trace_error_codes_set(int state);
 #endif
 
 #ifdef __cplusplus

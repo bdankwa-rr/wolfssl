@@ -1,6 +1,6 @@
 /* ssl_sess.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1142,10 +1142,8 @@ static int CheckSessionMatch(const WOLFSSL* ssl, const WOLFSSL_SESSION* sess)
            XMEMCMP(ssl->sessionCtx, sess->sessionCtx, sess->sessionCtxSz) != 0))
         return 0;
 #endif
-#if defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET)
     if (IsAtLeastTLSv1_3(ssl->version) != IsAtLeastTLSv1_3(sess->version))
         return 0;
-#endif
     return 1;
 }
 
@@ -1553,12 +1551,11 @@ int wolfSSL_SetSession(WOLFSSL* ssl, WOLFSSL_SESSION* session)
     ssl->options.resuming = 1;
     ssl->options.haveEMS = (ssl->session->haveEMS) ? 1 : 0;
 
-#if defined(SESSION_CERTS) || (defined(WOLFSSL_TLS13) && \
-                           defined(HAVE_SESSION_TICKET))
-    ssl->version              = ssl->session->version;
-    if (IsAtLeastTLSv1_3(ssl->version))
-        ssl->options.tls1_3 = 1;
-#endif
+    if (ssl->session->version.major != 0) {
+        ssl->version              = ssl->session->version;
+        if (IsAtLeastTLSv1_3(ssl->version))
+            ssl->options.tls1_3 = 1;
+    }
 #if defined(SESSION_CERTS) || !defined(NO_RESUME_SUITE_CHECK) || \
                     (defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET))
     ssl->options.cipherSuite0 = ssl->session->cipherSuite0;
@@ -2601,11 +2598,8 @@ int wolfSSL_i2d_SSL_SESSION(WOLFSSL_SESSION* sess, unsigned char** p)
     for (i = 0; i < sess->chain.count; i++)
         size += OPAQUE16_LEN + sess->chain.certs[i].length;
 #endif
-#if defined(SESSION_CERTS) || (defined(WOLFSSL_TLS13) && \
-                               defined(HAVE_SESSION_TICKET))
     /* Protocol version */
     size += OPAQUE16_LEN;
-#endif
 #if defined(SESSION_CERTS) || !defined(NO_RESUME_SUITE_CHECK) || \
                         (defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET))
     /* cipher suite */
@@ -2681,11 +2675,8 @@ int wolfSSL_i2d_SSL_SESSION(WOLFSSL_SESSION* sess, unsigned char** p)
             idx += sess->chain.certs[i].length;
         }
 #endif
-#if defined(SESSION_CERTS) || (defined(WOLFSSL_TLS13) && \
-                               defined(HAVE_SESSION_TICKET))
         data[idx++] = sess->version.major;
         data[idx++] = sess->version.minor;
-#endif
 #if defined(SESSION_CERTS) || !defined(NO_RESUME_SUITE_CHECK) || \
                         (defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET))
         data[idx++] = sess->cipherSuite0;
@@ -2795,6 +2786,10 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
     ato32(data + idx, &s->bornOn); idx += OPAQUE32_LEN;
     ato32(data + idx, &s->timeout); idx += OPAQUE32_LEN;
     s->sessionIDSz = data[idx++];
+    if (s->sessionIDSz > ID_LEN) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
 
     /* sessionID | secret | haveEMS | haveAltSessionID */
     if (i - idx < s->sessionIDSz + SECRET_LEN + OPAQUE8_LEN + OPAQUE8_LEN) {
@@ -2827,12 +2822,20 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
         goto end;
     }
     s->chain.count = data[idx++];
+    if (s->chain.count > MAX_CHAIN_DEPTH) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
     for (j = 0; j < s->chain.count; j++) {
         if (i - idx < OPAQUE16_LEN) {
             ret = BUFFER_ERROR;
             goto end;
         }
         ato16(data + idx, &length); idx += OPAQUE16_LEN;
+        if (length > MAX_X509_SIZE) {
+            ret = BUFFER_ERROR;
+            goto end;
+        }
         s->chain.certs[j].length = length;
         if (i - idx < length) {
             ret = BUFFER_ERROR;
@@ -2842,8 +2845,6 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
         idx += length;
     }
 #endif
-#if defined(SESSION_CERTS) || (defined(WOLFSSL_TLS13) && \
-                               defined(HAVE_SESSION_TICKET))
     /* Protocol Version */
     if (i - idx < OPAQUE16_LEN) {
         ret = BUFFER_ERROR;
@@ -2851,7 +2852,6 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
     }
     s->version.major = data[idx++];
     s->version.minor = data[idx++];
-#endif
 #if defined(SESSION_CERTS) || !defined(NO_RESUME_SUITE_CHECK) || \
                         (defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET))
     /* Cipher suite */
@@ -2869,6 +2869,10 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
         goto end;
     }
     ato16(data + idx, &s->idLen); idx += OPAQUE16_LEN;
+    if (s->idLen > SERVER_ID_LEN) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
 
     /* ServerID */
     if (i - idx < s->idLen) {
@@ -2884,6 +2888,10 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
         goto end;
     }
     s->sessionCtxSz = data[idx++];
+    if (s->sessionCtxSz > ID_LEN) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
 
     /* app session context ID */
     if (i - idx < s->sessionCtxSz) {
@@ -2910,17 +2918,21 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
 #endif
 #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
 #ifdef WOLFSSL_TLS13
+
+#ifdef WOLFSSL_32BIT_MILLI_TIME
+    if (i - idx < OPAQUE32_LEN) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
+    ato32(data + idx, &s->ticketSeen);
+    idx += OPAQUE32_LEN;
+#else
     if (i - idx < (OPAQUE32_LEN * 2)) {
         ret = BUFFER_ERROR;
         goto end;
     }
-#ifdef WOLFSSL_32BIT_MILLI_TIME
-    ato32(data + idx, &s->ticketSeen);
-    idx += OPAQUE32_LEN;
-#else
     {
         word32 seenHi, seenLo;
-
         ato32(data + idx, &seenHi);
         idx += OPAQUE32_LEN;
         ato32(data + idx, &seenLo);
@@ -2928,6 +2940,11 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
         s->ticketSeen = ((sword64)seenHi << 32) + seenLo;
     }
 #endif
+
+    if (i - idx < OPAQUE32_LEN) {
+        ret = BUFFER_ERROR;
+        goto end;
+    }
     ato32(data + idx, &s->ticketAdd);
     idx += OPAQUE32_LEN;
     if (i - idx < OPAQUE8_LEN) {
@@ -3147,10 +3164,8 @@ static void SESSION_ex_data_cache_update(WOLFSSL_SESSION* session, int idx,
         if (cacheSession && cacheSession->sessionIDSz == ID_LEN &&
                 XMEMCMP(id, cacheSession->sessionID, ID_LEN) == 0
                 && session->side == cacheSession->side
-        #if defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET)
                 && (IsAtLeastTLSv1_3(session->version) ==
                     IsAtLeastTLSv1_3(cacheSession->version))
-        #endif
             ) {
             if (get) {
                 if (getRet) {
@@ -3575,10 +3590,7 @@ void SetupSession(WOLFSSL* ssl)
 #ifndef NO_ASN_TIME
     session->bornOn  = LowResTimer();
 #endif
-#if defined(SESSION_CERTS) || (defined(WOLFSSL_TLS13) && \
-                               defined(HAVE_SESSION_TICKET))
     session->version = ssl->version;
-#endif
 #if defined(SESSION_CERTS) || !defined(NO_RESUME_SUITE_CHECK) || \
                         (defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET))
     session->cipherSuite0 = ssl->options.cipherSuite0;

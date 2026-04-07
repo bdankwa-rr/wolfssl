@@ -1,6 +1,6 @@
 /* io.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -180,7 +180,15 @@
             }  /* extern "C" */
         #endif
 
-        #include <version.h>
+        #ifdef __has_include
+            #if __has_include(<zephyr/version.h>)
+                #include <zephyr/version.h>
+            #else
+                #include <version.h>
+            #endif
+        #else
+            #include <version.h>
+        #endif
         #if KERNEL_VERSION_NUMBER >= 0x30100
             #include <zephyr/net/socket.h>
             #ifdef CONFIG_POSIX_API
@@ -623,6 +631,11 @@ WOLFSSL_API  int wolfIO_RecvFrom(SOCKET_T sd, WOLFSSL_BIO_ADDR *addr, char *buf,
         #define CloseSocket(s) closesocket(s)
     #endif
     #define StartTCP() WC_DO_NOTHING
+#elif defined(WOLFSSL_ZEPHYR) && KERNEL_VERSION_NUMBER >= 0x40100
+    #ifndef CloseSocket
+        #define CloseSocket(s) zsock_close(s)
+    #endif
+    #define StartTCP() WC_DO_NOTHING
 #else
     #ifndef CloseSocket
         #define CloseSocket(s) close(s)
@@ -1006,12 +1019,16 @@ WOLFSSL_API void wolfSSL_SetIOWriteFlags(WOLFSSL* ssl, int flags);
         #if (defined(__MINGW32__) || defined(__MINGW64__)) && !defined(UNICODE)
             #define XINET_PTON(a,b,c)   InetPton((a),(b),(c))
         #else
-            #define XINET_PTON(a,b,c)   InetPton((a),(PCWSTR)(b),(c))
+            #define XINET_PTON(a,b,c)   InetPtonA((a),(b),(c))
         #endif
     #elif defined(FREESCALE_MQX)
         #define XINET_PTON(a,b,c,d) inet_pton((a),(b),(c),(d))
     #elif defined(WOLFSSL_ZEPHYR)
         #define XINET_PTON(a,b,c)   zsock_inet_pton((a),(b),(c))
+    #elif defined(WOLFSSL_LINUXKM)
+        #define XINET_PTON(a,b,c) \
+            (((a) == WOLFSSL_IP4) ? in4_pton((b), -1, (u8*)(c), -1, NULL) : \
+             ((a) == WOLFSSL_IP6) ? in6_pton((b), -1, (u8*)(c), -1, NULL) : 0)
     #else
         #define XINET_PTON(a,b,c)   inet_pton((a),(b),(c))
     #endif

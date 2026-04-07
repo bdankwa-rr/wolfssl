@@ -1,6 +1,6 @@
 /* aes.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -804,6 +804,13 @@ WOLFSSL_API WARN_UNUSED_RESULT
 int wc_AesSivDecrypt_ex(const byte* key, word32 keySz, const AesSivAssoc* assoc,
                         word32 numAssoc, const byte* nonce, word32 nonceSz,
                         const byte* in, word32 inSz, byte* siv, byte* out);
+#endif
+
+#ifdef WOLFSSL_CMAC
+/* forward declaration, in case aes.h is being included by cmac.h */
+struct Cmac;
+WOLFSSL_LOCAL int wc_local_CmacUpdateAes(struct Cmac *cmac, const byte* in,
+                                   word32 inSz);
 #endif
 
 #ifdef WOLFSSL_AES_EAX

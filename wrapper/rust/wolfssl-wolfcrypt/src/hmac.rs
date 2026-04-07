@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,7 +26,7 @@ functionality.
 #![cfg(hmac)]
 
 use crate::sys;
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 
 /// Rust wrapper for wolfSSL `Hmac` object.
 pub struct HMAC {
@@ -112,7 +112,7 @@ impl HMAC {
     /// let key = [0x42u8; 16];
     /// let mut hmac = HMAC::new_ex(HMAC::TYPE_SHA256, &key, None, None).expect("Error with new_ex()");
     /// ```
-    pub fn new_ex(typ: i32, key: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn new_ex(typ: i32, key: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let key_size = key.len() as u32;
         let mut wc_hmac: MaybeUninit<sys::Hmac> = MaybeUninit::uninit();
         let heap = match heap {
@@ -156,10 +156,12 @@ impl HMAC {
     /// # Example
     ///
     /// ```rust
+    /// #![cfg(hmac_setkey_ex)]
     /// use wolfssl_wolfcrypt::hmac::HMAC;
     /// let key = [0x42u8; 3];
     /// let mut hmac = HMAC::new_allow_short_key(HMAC::TYPE_SHA256, &key).expect("Error with new_allow_short_key()");
     /// ```
+    #[cfg(hmac_setkey_ex)]
     pub fn new_allow_short_key(typ: i32, key: &[u8]) -> Result<Self, i32> {
         Self::new_allow_short_key_ex(typ, key, None, None)
     }
@@ -182,11 +184,13 @@ impl HMAC {
     /// # Example
     ///
     /// ```rust
+    /// #![cfg(hmac_setkey_ex)]
     /// use wolfssl_wolfcrypt::hmac::HMAC;
     /// let key = [0x42u8; 3];
     /// let mut hmac = HMAC::new_allow_short_key_ex(HMAC::TYPE_SHA256, &key, None, None).expect("Error with new_allow_short_key_ex()");
     /// ```
-    pub fn new_allow_short_key_ex(typ: i32, key: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    #[cfg(hmac_setkey_ex)]
+    pub fn new_allow_short_key_ex(typ: i32, key: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let key_size = key.len() as u32;
         let mut wc_hmac: MaybeUninit<sys::Hmac> = MaybeUninit::uninit();
         let heap = match heap {

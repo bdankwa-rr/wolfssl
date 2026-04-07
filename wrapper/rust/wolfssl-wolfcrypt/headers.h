@@ -19,3 +19,6 @@
 #include "wolfssl/wolfcrypt/logging.h"
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/pwdbased.h"
+#include "wolfssl/wolfcrypt/dilithium.h"
+#include "wolfssl/wolfcrypt/mlkem.h"
+#include "wolfssl/wolfcrypt/wc_lms.h"

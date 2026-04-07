@@ -1,6 +1,6 @@
 /* ssl_p7p12.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -292,6 +292,7 @@ WOLFSSL_STACK* wolfSSL_PKCS7_get0_signers(PKCS7* pkcs7, WOLFSSL_STACK* certs,
     }
 
     if (wolfSSL_sk_X509_push(signers, x509) <= 0) {
+        wolfSSL_X509_free(x509);
         wolfSSL_sk_X509_pop_free(signers, NULL);
         return NULL;
     }

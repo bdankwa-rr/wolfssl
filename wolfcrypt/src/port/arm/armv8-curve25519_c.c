@@ -1,6 +1,6 @@
 /* armv8-curve25519
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -255,7 +255,7 @@ int fe_isnegative(const fe a)
     return (word32)(size_t)a;
 }
 
-void fe_cmov_table(fe* r, fe* base, signed char b)
+void fe_cmov_table(fe* r, const fe* base, signed char b)
 {
     __asm__ __volatile__ (
         "stp	x29, x30, [sp, #-32]!\n\t"
@@ -463,15 +463,15 @@ void fe_cmov_table(fe* r, fe* base, signed char b)
         "stp	x12, x13, [%x[r], #64]\n\t"
         "stp	x14, x15, [%x[r], #80]\n\t"
         "ldp	x29, x30, [sp], #32\n\t"
-        : [r] "+r" (r), [base] "+r" (base), [b] "+r" (b)
-        :
+        : [r] "+r" (r), [b] "+r" (b)
+        : [base] "r" (base)
         : "memory", "cc", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
             "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x19", "x20",
             "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28"
     );
 }
 
-void fe_invert_nct(word64* r, const word64* a)
+void fe_invert_nct(fe r, const fe a)
 {
     __asm__ __volatile__ (
         "mov	x19, #-19\n\t"

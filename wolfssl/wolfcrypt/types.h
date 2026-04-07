@@ -1,6 +1,6 @@
 /* types.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -253,6 +253,23 @@ typedef const char wcchar[];
             #define SIZEOF_LONG_LONG 8
         #endif
         #endif
+#endif
+
+#if defined(HAVE___UINT128_T) && !defined(NO_INT128)
+    #ifndef WOLFSSL_UINT128_T_DEFINED
+        #ifdef __SIZEOF_INT128__
+            typedef __uint128_t uint128_t;
+            typedef __int128_t   int128_t;
+            typedef __uint128_t   word128;
+            typedef __int128_t   sword128;
+        #else
+            typedef unsigned long uint128_t __attribute__ ((mode(TI)));
+            typedef long           int128_t __attribute__ ((mode(TI)));
+            typedef uint128_t       word128;
+            typedef int128_t       sword128;
+        #endif
+        #define WOLFSSL_UINT128_T_DEFINED
+    #endif
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER == 1200)) ||  /* MSVC6 */ \
@@ -1361,6 +1378,9 @@ enum {
     DYNAMIC_TYPE_X509_ACERT   = 103,
     DYNAMIC_TYPE_OS_BUF       = 104,
     DYNAMIC_TYPE_ASCON        = 105,
+    DYNAMIC_TYPE_SHA          = 106,
+    DYNAMIC_TYPE_SLHDSA       = 107,
+    DYNAMIC_TYPE_OCSP_RESPONSE = 108,
     DYNAMIC_TYPE_SNIFFER_SERVER       = 1000,
     DYNAMIC_TYPE_SNIFFER_SESSION      = 1001,
     DYNAMIC_TYPE_SNIFFER_PB           = 1002,
@@ -1439,19 +1459,13 @@ enum wc_HashType {
     WC_HASH_TYPE_SHA3_512 = 13,
     WC_HASH_TYPE_BLAKE2B = 14,
     WC_HASH_TYPE_BLAKE2S = 19,
-#ifdef WOLFSSL_SHAKE128
+    WC_HASH_TYPE_SHA512_224 = 22,
+    WC_HASH_TYPE_SHA512_256 = 23,
     WC_HASH_TYPE_SHAKE128 = 20,
-#endif
-#ifdef WOLFSSL_SHAKE256
     WC_HASH_TYPE_SHAKE256 = 21,
-#endif
-#if defined(WOLFSSL_SHAKE256)
-    WC_HASH_TYPE_MAX = WC_HASH_TYPE_SHAKE256,
-#elif defined(WOLFSSL_SHAKE128)
-    WC_HASH_TYPE_MAX = WC_HASH_TYPE_SHAKE128,
-#else
-    WC_HASH_TYPE_MAX = WC_HASH_TYPE_BLAKE2S,
-#endif
+    WC_HASH_TYPE_SM3     = 24,
+    WC_HASH_TYPE_MAX = WC_HASH_TYPE_SM3
+
     #ifndef WOLFSSL_NOSHA512_224
         #define WOLFSSL_NOSHA512_224
     #endif
@@ -1475,34 +1489,12 @@ enum wc_HashType {
     WC_HASH_TYPE_SHA3_512 = 13,
     WC_HASH_TYPE_BLAKE2B = 14,
     WC_HASH_TYPE_BLAKE2S = 15,
-    #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_BLAKE2S
-    #ifndef WOLFSSL_NOSHA512_224
-        WC_HASH_TYPE_SHA512_224 = 16,
-        #undef _WC_HASH_TYPE_MAX
-        #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_SHA512_224
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
-        WC_HASH_TYPE_SHA512_256 = 17,
-        #undef _WC_HASH_TYPE_MAX
-        #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_SHA512_256
-    #endif
-    #ifdef WOLFSSL_SHAKE128
-        WC_HASH_TYPE_SHAKE128 = 18,
-        #undef _WC_HASH_TYPE_MAX
-        #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_SHAKE128
-    #endif
-    #ifdef WOLFSSL_SHAKE256
-        WC_HASH_TYPE_SHAKE256 = 19,
-        #undef _WC_HASH_TYPE_MAX
-        #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_SHAKE256
-    #endif
-    #ifdef WOLFSSL_SM3
-        WC_HASH_TYPE_SM3     = 20,
-        #undef _WC_HASH_TYPE_MAX
-        #define _WC_HASH_TYPE_MAX WC_HASH_TYPE_SM3
-    #endif
-    WC_HASH_TYPE_MAX = _WC_HASH_TYPE_MAX
-    #undef _WC_HASH_TYPE_MAX
+    WC_HASH_TYPE_SHA512_224 = 16,
+    WC_HASH_TYPE_SHA512_256 = 17,
+    WC_HASH_TYPE_SHAKE128 = 18,
+    WC_HASH_TYPE_SHAKE256 = 19,
+    WC_HASH_TYPE_SM3     = 20,
+    WC_HASH_TYPE_MAX = WC_HASH_TYPE_SM3
 
 #endif /* HAVE_SELFTEST */
 };
@@ -2055,6 +2047,33 @@ WOLFSSL_API word32 CheckRunTimeSettings(void);
     #define WC_NORETURN
 #endif
 
+#ifdef __has_attribute
+#if __has_attribute(nonnull)
+    #ifndef WC_ARG_NOT_NULL
+        #define WC_ARG_NOT_NULL(a) __attribute__((nonnull(a)))
+    #endif
+    #ifndef WC_ARGS_NOT_NULL
+        /* double-parenthesize, a la WC_ARGS_NOT_NULL((1, 2)) -- this approach
+         * maintains compatibility with WOLF_NO_VARIADIC_MACROS.
+         */
+        #define WC_ARGS_NOT_NULL(p_a) __attribute__((nonnull p_a))
+    #endif
+    #ifndef WC_ALL_ARGS_NOT_NULL
+        #define WC_ALL_ARGS_NOT_NULL __attribute__((nonnull))
+    #endif
+#endif /* __has_attribute(nonnull) */
+#endif /* defined(__has_attribute) */
+
+#ifndef WC_ARG_NOT_NULL
+    #define WC_ARG_NOT_NULL(a) /* null expansion */
+#endif
+#ifndef WC_ARGS_NOT_NULL
+    #define WC_ARGS_NOT_NULL(p_a) /* null expansion */
+#endif
+#ifndef WC_ALL_ARGS_NOT_NULL
+    #define WC_ALL_ARGS_NOT_NULL
+#endif
+
 #if defined(WOLFSSL_KEY_GEN) || defined(HAVE_COMP_KEY) || \
     defined(WOLFSSL_DEBUG_MATH) || defined(DEBUG_WOLFSSL) || \
     defined(WOLFSSL_PUBLIC_MP) || defined(OPENSSL_EXTRA) || \
@@ -2299,7 +2318,7 @@ enum Max_ASN {
     MAX_ENCODED_SIG_SZ  = FP_MAX_BITS / 8,
 #elif (defined(WOLFSSL_SP_MATH_ALL) || defined(WOLFSSL_SP_MATH)) && \
     defined(SP_INT_BITS)
-    MAX_ENCODED_SIG_SZ  = (SP_INT_BITS + 7) / 8,
+    MAX_ENCODED_SIG_SZ  = WC_BITS_TO_BYTES(SP_INT_BITS),
 #elif defined(WOLFSSL_HAPROXY)
     MAX_ENCODED_SIG_SZ  = 1024,    /* Supports 8192 bit keys */
 #else
@@ -2370,7 +2389,7 @@ enum Max_ASN {
 
 #define MAX_SIG_SZ MAX_ENCODED_SIG_SZ
 
-#ifdef WOLFSSL_CERT_GEN
+#if defined(WOLFSSL_CERT_GEN) || defined(HAVE_OCSP_RESPONDER)
     /* Used in asn.c MakeSignature for ECC and RSA non-blocking/async */
     enum CertSignState {
         CERTSIGN_STATE_BEGIN,
@@ -2397,6 +2416,8 @@ enum Max_ASN {
         #ifndef NO_RSA
         int encSigSz;
         #endif
+        int digestSz;
+        int typeH; /* Hash algorithm type for encoding */
         int state; /* enum CertSignState */
     } CertSignCtx;
 

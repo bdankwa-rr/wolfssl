@@ -1,6 +1,6 @@
 /* fe_x25519_asm.S */
 /*
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -12372,7 +12372,7 @@ _fe_cmov_table_avx2:
         pushq	%r15
         pushq	%rbx
         movq	%rdx, %rcx
-        xor	%rbx, %rbx
+        xorq	%rbx, %rbx
         movsbq	%cl, %rax
         cdq
         xorb	%dl, %al

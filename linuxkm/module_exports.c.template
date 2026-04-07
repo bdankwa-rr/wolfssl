@@ -1,7 +1,7 @@
 /* module_exports.c.template -- static preamble for dynamically generated
  * module_exports.c (see Kbuild)
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -175,6 +175,9 @@
 #endif
 #ifdef HAVE_DILITHIUM
     #include <wolfssl/wolfcrypt/dilithium.h>
+#endif
+#ifdef WOLFSSL_HAVE_SLHDSA
+    #include <wolfssl/wolfcrypt/wc_slhdsa.h>
 #endif
 
 #ifdef OPENSSL_EXTRA

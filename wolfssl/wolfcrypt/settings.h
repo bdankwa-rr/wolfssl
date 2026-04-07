@@ -1,6 +1,6 @@
 /* settings.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -62,6 +62,9 @@
     !defined(WOLFSSL_NO_OPTIONS_H)
     #include <wolfssl/options.h>
 #endif
+
+#define WC_BITS_TO_BYTES(x) (((x) + 7) >> 3)
+#define WC_BITS_FULL_BYTES(x) (WC_BITS_TO_BYTES(x) << 3)
 
 /* Uncomment next line if using IPHONE */
 /* #define IPHONE */
@@ -456,6 +459,29 @@
     (WOLFSSL_FIPS_VERSION_CODE > WOLFSSL_MAKE_FIPS_VERSION3(major,minor,patch))
 #define FIPS_VERSION3_NE(major,minor,patch) \
     (WOLFSSL_FIPS_VERSION_CODE != WOLFSSL_MAKE_FIPS_VERSION3(major,minor,patch))
+
+#if defined(HAVE_FIPS) && !defined(WC_FIPS_186_5) && !defined(WC_FIPS_186_4)
+    #if FIPS_VERSION3_GE(7,0,0)
+        #ifndef WC_FIPS_186_5
+            #define WC_FIPS_186_5
+        #endif
+    #else
+        #ifndef WC_FIPS_186_4
+            #define WC_FIPS_186_4
+        #endif
+    #endif
+#endif
+#if defined(WC_FIPS_186_4) && defined(WC_FIPS_186_5)
+    #error Conflicting FIPS 186 settings.
+#endif
+#if (defined(WC_FIPS_186_4) || defined(WC_FIPS_186_5)) && \
+        !defined(WC_FIPS_186_4_PLUS)
+    #define WC_FIPS_186_4_PLUS
+#endif
+#if defined(WC_FIPS_186_5) && !defined(WC_FIPS_186_5_PLUS)
+    #define WC_FIPS_186_5_PLUS
+#endif
+
 /*------------------------------------------------------------*/
 
 
@@ -2192,6 +2218,10 @@ extern void uITRON4_free(void *p) ;
         #undef  STM32_HASH
         #define STM32_HASH
     #endif
+    #ifndef NO_STM32_HMAC
+        #undef  STM32_HMAC
+        #define STM32_HMAC
+    #endif
     #if !defined(__GNUC__) && !defined(__ICCARM__)
         #define KEIL_INTRINSICS
     #endif
@@ -2614,7 +2644,15 @@ extern void uITRON4_free(void *p) ;
         }  /* extern "C" */
     #endif
 
-    #include <version.h>
+    #ifdef __has_include
+        #if __has_include(<zephyr/version.h>)
+            #include <zephyr/version.h>
+        #else
+            #include <version.h>
+        #endif
+    #else
+        #include <version.h>
+    #endif
 #if KERNEL_VERSION_NUMBER >= 0x30100
     #include <zephyr/kernel.h>
     #include <zephyr/sys/printk.h>
@@ -2642,8 +2680,37 @@ extern void uITRON4_free(void *p) ;
     void *z_realloc(void *ptr, size_t size);
     #define realloc   z_realloc
 
+    #if KERNEL_VERSION_NUMBER >= 0x40100
+    /* Zephyr >= 4.1 removed CONFIG_NET_SOCKETS_POSIX_NAMES and the
+     * corresponding macro block in <zephyr/net/socket.h>.
+     * Define our own compile-time remapping to zsock_* so that wolfSSL
+     * always calls Zephyr's network stack directly, avoiding host-libc
+     * symbol conflicts on native_sim. */
+    #define socket      zsock_socket
+    #define bind        zsock_bind
+    #define connect     zsock_connect
+    #define listen      zsock_listen
+    #define accept      zsock_accept
+    #define send        zsock_send
+    #define recv        zsock_recv
+    #define sendto      zsock_sendto
+    #define recvfrom    zsock_recvfrom
+    #define setsockopt  zsock_setsockopt
+    #define getsockopt  zsock_getsockopt
+    #define shutdown    zsock_shutdown
+    #define getpeername zsock_getpeername
+    #define getsockname zsock_getsockname
+    /* Note: close, poll, inet_pton, inet_ntop are NOT remapped here.
+     * They are general POSIX functions still declared in Zephyr's POSIX
+     * headers; redefining them conflicts with __syscall declarations in
+     * <zephyr/net/socket.h>. close is handled via CloseSocket in wolfio.h,
+     * inet_pton/inet_ntop via XINET_PTON/XINET_NTOP in wolfio.h. */
+    #else
+    /* Zephyr < 4.1: define CONFIG_NET_SOCKETS_POSIX_NAMES so that
+     * <net/socket.h> provides the POSIX name remapping macros. */
     #if !defined(CONFIG_NET_SOCKETS_POSIX_NAMES) && !defined(CONFIG_POSIX_API)
     #define CONFIG_NET_SOCKETS_POSIX_NAMES
+    #endif
     #endif
 #endif /* WOLFSSL_ZEPHYR */
 
@@ -3105,13 +3172,15 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif /* HAVE_ECC */
 
-#if (defined(OPENSSL_EXTRA) || defined(OPENSSL_ALL)) && defined(HAVE_ECC) && \
-    !defined(WOLFSSL_ATECC508A) && !defined(WOLFSSL_ATECC608A) && \
-    !defined(WOLFSSL_CRYPTOCELL) && !defined(WOLFSSL_SE050) && \
-    !defined(WOLF_CRYPTO_CB_ONLY_ECC) && !defined(WOLFSSL_STM32_PKA)
-    #undef  USE_ECC_B_PARAM
-    #define USE_ECC_B_PARAM
+/* The FIPS-validated ecc.c gates wc_ecc_point_is_on_curve behind
+ * USE_ECC_B_PARAM. That guard was removed from the non-FIPS tree (the
+ * function is now unconditionally compiled in). Force-define the flag
+ * when building with any FIPS module so the certified file still
+ * provides the symbol. */
+ #if defined(HAVE_FIPS) && !defined(USE_ECC_B_PARAM)
+ #define USE_ECC_B_PARAM
 #endif
+
 
 /* Curve25519 Configs */
 #ifdef HAVE_CURVE25519
@@ -3348,6 +3417,12 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif
 
+/*  For setting.h/user_settings.h */
+#if defined(WOLFSSL_HAVE_SP_DH) && !defined(NO_DH) && \
+    !defined(WOLFSSL_SP_4096) && (MIN_FFDHE_BITS >= 4096)
+    #define WOLFSSL_SP_4096
+#endif
+
 /* if desktop type system and fastmath increase default max bits */
 #if defined(WOLFSSL_X86_64_BUILD) || defined(WOLFSSL_AARCH64_BUILD) || \
     defined(OPENSSL_EXTRA)
@@ -3379,6 +3454,8 @@ extern void uITRON4_free(void *p) ;
 /* Default AES minimum auth tag sz, allow user to override */
 #ifndef WOLFSSL_MIN_AUTH_TAG_SZ
     #define WOLFSSL_MIN_AUTH_TAG_SZ 12
+#elif WOLFSSL_MIN_AUTH_TAG_SZ < 1
+    #error WOLFSSL_MIN_AUTH_TAG_SZ must be at least 1
 #endif
 
 
@@ -3775,10 +3852,18 @@ extern void uITRON4_free(void *p) ;
         #define WOLFSSL_NO_GETPID
     #endif /* WOLFSSL_NO_GETPID */
     #ifndef SIZEOF_LONG
-        #define SIZEOF_LONG         8
+        #ifdef __SIZEOF_LONG__
+            #define SIZEOF_LONG __SIZEOF_LONG__
+        #else
+            #define SIZEOF_LONG         8
+        #endif
     #endif
     #ifndef SIZEOF_LONG_LONG
-        #define SIZEOF_LONG_LONG    8
+        #ifdef __SIZEOF_LONG_LONG__
+            #define SIZEOF_LONG_LONG __SIZEOF_LONG_LONG__
+        #else
+            #define SIZEOF_LONG_LONG    8
+        #endif
     #endif
     #define CHAR_BIT            8
     #ifndef WOLFSSL_SP_DIV_64
@@ -3943,6 +4028,11 @@ extern void uITRON4_free(void *p) ;
 
     #if !defined(WC_NO_VERBOSE_RNG) && !defined(WC_VERBOSE_RNG)
         #define WC_VERBOSE_RNG
+    #endif
+
+    #if WOLFSSL_GENERAL_ALIGNMENT < SIZEOF_LONG
+        #undef WOLFSSL_GENERAL_ALIGNMENT
+        #define WOLFSSL_GENERAL_ALIGNMENT SIZEOF_LONG
     #endif
 #endif /* WOLFSSL_KERNEL_MODE */
 
@@ -4259,6 +4349,16 @@ extern void uITRON4_free(void *p) ;
     #define WOLFSSL_BASE64_DECODE
 #endif
 
+#if defined(OPENSSL_EXTRA) || defined(OPENSSL_EXTRA_X509_SMALL) || \
+    defined(HAVE_WEBSERVER) || defined(HAVE_FIPS) || \
+    defined(HAVE_ECC_CDH) || defined(HAVE_SELFTEST) || \
+    defined(WOLFCRYPT_FIPS_CORE_DYNAMIC_HASH_VALUE) || \
+    defined(WOLFSSL_ENCRYPTED_KEYS)
+    #ifndef WOLFSSL_BASE16
+        #define WOLFSSL_BASE16
+    #endif
+#endif
+
 #if defined(FORTRESS) && !defined(HAVE_EX_DATA)
     #define HAVE_EX_DATA
 #endif
@@ -4370,7 +4470,7 @@ extern void uITRON4_free(void *p) ;
         #endif
     #elif defined(WOLFSSL_SP_MATH_ALL) || defined(WOLFSSL_SP_MATH)
         /* SP implementation supports numbers of SP_INT_BITS bits. */
-        #define DH_MAX_SIZE    (((SP_INT_BITS + 7) / 8) * 8)
+        #define DH_MAX_SIZE    WC_BITS_FULL_BYTES(SP_INT_BITS)
         #if defined(WOLFSSL_MYSQL_COMPATIBLE) && DH_MAX_SIZE < 8192
             #error "MySQL needs SP_INT_BITS at least at 8192"
         #endif
@@ -4488,13 +4588,20 @@ extern void uITRON4_free(void *p) ;
     #define WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC
 #endif
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_DTLS13) && \
-    !defined(WOLFSSL_DTLS_CH_FRAG)
-#warning "Using DTLS 1.3 + pqc without WOLFSSL_DTLS_CH_FRAG will probably" \
-         "fail.Use --enable-dtls-frag-ch to enable it."
+#if defined(HAVE_PQC) && defined(WOLFSSL_HAVE_MLKEM) && \
+    defined(WOLFSSL_DTLS13) && !defined(WOLFSSL_DTLS_CH_FRAG)
+#define WOLFSSL_DTLS_CH_FRAG
+#warning "WOLFSSL_DTLS_CH_FRAG is enabled to support PQC in DTLS 1.3"
 #endif
 #if !defined(WOLFSSL_DTLS13) && defined(WOLFSSL_DTLS_CH_FRAG)
 #error "WOLFSSL_DTLS_CH_FRAG only works with DTLS 1.3"
+#endif
+
+#if defined(HAVE_PQC) && defined(WOLFSSL_HAVE_MLKEM) && \
+    !defined(WOLFSSL_NO_ML_KEM) && !defined(WOLFSSL_PQC_HYBRIDS) && \
+    defined(WOLFSSL_TLS_NO_MLKEM_STANDALONE) && !defined(WOLFCRYPT_ONLY)
+#error "Neither PQ/T hybrid combinations nor ML-KEM as standalone TLS key " \
+    "exchange are enabled"
 #endif
 
 /* SRTP requires DTLS */
@@ -4751,6 +4858,11 @@ extern void uITRON4_free(void *p) ;
     #error "OPENSSL_ALL can not be defined with OPENSSL_COEXIST"
 #endif
 
+/* OPENSSL_ALL requires WOLFSSL_IP_ALT_NAME for IP SAN verification. */
+#if defined(OPENSSL_ALL) && !defined(WOLFSSL_IP_ALT_NAME)
+    #error "OPENSSL_ALL requires WOLFSSL_IP_ALT_NAME"
+#endif
+
 #if !defined(NO_DSA) && defined(NO_SHA)
     #error "Please disable DSA if disabling SHA-1"
 #endif
@@ -4962,6 +5074,9 @@ extern void uITRON4_free(void *p) ;
            " (WC_TEST_NO_CRYPTOCB_SW_TEST)" \
            " requires WOLF_CRYPTO_CB"
 #endif
+#if defined(HAVE_PKCS11) && !defined(WOLF_CRYPTO_CB_FREE)
+    #define WOLF_CRYPTO_CB_FREE
+#endif
 #if (defined(WOLF_CRYPTO_CB_COPY) || defined(WOLF_CRYPTO_CB_FREE)) && \
     !defined(WOLF_CRYPTO_CB)
     #error "Crypto callback utilities" \
@@ -4992,6 +5107,24 @@ extern void uITRON4_free(void *p) ;
 
 #if defined(WC_RNG_BANK_SUPPORT) && defined(NO_ASN_TIME)
     #undef WC_RNG_BANK_SUPPORT
+#endif
+
+#ifdef HAVE_OCSP_RESPONDER
+    #ifndef HAVE_OCSP
+        #error "HAVE_OCSP_RESPONDER requires HAVE_OCSP"
+    #endif
+    #ifndef WOLFSSL_ASN_TEMPLATE
+        #error "HAVE_OCSP_RESPONDER requires WOLFSSL_ASN_TEMPLATE"
+    #endif
+    #ifdef NO_CERTS
+        #error "HAVE_OCSP_RESPONDER incompatible with NO_CERTS"
+    #endif
+    #ifndef WOLFSSL_CERT_GEN
+        #error "HAVE_OCSP_RESPONDER requires WOLFSSL_CERT_GEN"
+    #endif
+    #ifdef NO_SHA
+        #error "HAVE_OCSP_RESPONDER requires SHA-1 (NO_SHA is defined)"
+    #endif
 #endif
 
 #ifdef __cplusplus

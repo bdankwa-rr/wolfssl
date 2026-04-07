@@ -1,6 +1,6 @@
 /* dsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -27,6 +27,7 @@
 #include <wolfssl/wolfcrypt/wolfmath.h>
 #include <wolfssl/wolfcrypt/sha.h>
 #include <wolfssl/wolfcrypt/dsa.h>
+#include <wolfssl/wolfcrypt/hash.h>
 
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
@@ -85,10 +86,7 @@ void wc_FreeDsaKey(DsaKey* key)
     if (key == NULL)
         return;
 
-    if (key->type == DSA_PRIVATE)
-        mp_forcezero(&key->x);
-
-    mp_clear(&key->x);
+    mp_forcezero(&key->x);
     mp_clear(&key->y);
     mp_clear(&key->g);
     mp_clear(&key->q);
@@ -227,10 +225,11 @@ int wc_MakeDsaKey(WC_RNG *rng, DsaKey *dsa)
         dsa->type = DSA_PRIVATE;
 
     if (err != MP_OKAY) {
-        mp_clear(&dsa->x);
+        mp_forcezero(&dsa->x);
         mp_clear(&dsa->y);
     }
 
+    ForceZero(cBuf, (word32)cSz);
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
     XFREE(cBuf, dsa->heap, DYNAMIC_TYPE_TMP_BUFFER);
     if (tmpQ != NULL) {
@@ -691,6 +690,12 @@ int wc_DsaSign_ex(const byte* digest, word32 digestSz, byte* out, DsaKey* key,
     if (digest == NULL || out == NULL || key == NULL || rng == NULL)
         return BAD_FUNC_ARG;
 
+    if ((digestSz > WC_MAX_DIGEST_SIZE) ||
+        (digestSz < WC_MIN_DIGEST_SIZE))
+    {
+        return BAD_LENGTH_E;
+    }
+
     SAVE_VECTOR_REGISTERS(return _svr_ret;);
 
     do {
@@ -1023,6 +1028,16 @@ int wc_DsaVerify_ex(const byte* digest, word32 digestSz, const byte* sig,
 
     if (digest == NULL || sig == NULL || key == NULL || answer == NULL)
         return BAD_FUNC_ARG;
+
+    /* Note the min allowed digestSz here is WC_SHA_DIGEST_SIZE, not
+     * WC_MIN_DIGEST_SIZE, to allow verify-only legacy DSA operations, as
+     * expressly allowed under FIPS 186-5, FIPS 140-3, and SP 800-131A.
+     */
+    if ((digestSz > WC_MAX_DIGEST_SIZE) ||
+        (digestSz < WC_SHA_DIGEST_SIZE))
+    {
+        return BAD_LENGTH_E;
+    }
 
     do {
 #ifdef WOLFSSL_SMALL_STACK

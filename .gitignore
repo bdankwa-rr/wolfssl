@@ -70,6 +70,7 @@ examples/sctp/sctp-client
 examples/sctp/sctp-client-dtls
 examples/asn1/asn1
 examples/pem/pem
+examples/ocsp_responder/ocsp_responder
 server_ready
 snifftest
 output
@@ -107,6 +108,10 @@ ecc-key.der
 ecc-key.pem
 certreq.der
 certreq.pem
+crlRsaOut.pem
+crlRsaOut.der
+crlEccOut.pem
+crlEccOut.der
 pkcs7cert.der
 pkcs7authEnvelopedDataAES128GCM.der
 pkcs7authEnvelopedDataAES128GCM_ECDH_SHA1KDF.der
@@ -241,6 +246,8 @@ linuxkm/linuxkm/get_thread_size
 linuxkm/linuxkm
 linuxkm/src
 linuxkm/patches/src
+linuxkm/libwolfssl-user-build
+linuxkm/linuxkm-fips-hash
 *.nds
 
 # Generated during FreeBSD kernel module build.
@@ -479,6 +486,10 @@ wolfssl/debug-trace-error-codes.h
 wolfssl/debug-untrace-error-codes.h
 
 AGENTS.md
+CLAUDE.md
 
 # Code navigation files
 compile_commands.json
+
+# Python cache
+__pycache__/

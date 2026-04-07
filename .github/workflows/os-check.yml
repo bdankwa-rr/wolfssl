@@ -38,6 +38,12 @@ jobs:
           '--enable-experimental --enable-kyber --enable-dtls --enable-dtls13
              --enable-dtls-frag-ch',
           '--enable-all --enable-dtls13 --enable-dtls-frag-ch',
+          '--enable-all --enable-dtls13 --enable-dtls-frag-ch --disable-mlkem',
+          '--enable-all --enable-dtls13 --enable-dtls-frag-ch
+           --enable-tls-mlkem-standalone',
+          '--enable-all --enable-dtls13 --enable-dtls-frag-ch
+           --enable-tls-mlkem-standalone --enable-experimental
+           --enable-extra-pqc-hybrids',
           '--enable-dtls --enable-dtls13 --enable-dtls-frag-ch
            --enable-dtls-mtu',
           '--enable-dtls --enable-dtlscid --enable-dtls13 --enable-secure-renegotiation
@@ -53,6 +59,10 @@ jobs:
           '--enable-opensslall --enable-opensslextra CPPFLAGS=-DWC_RNG_SEED_CB',
           '--enable-opensslall --enable-opensslextra
             CPPFLAGS=''-DWC_RNG_SEED_CB -DWOLFSSL_NO_GETPID'' ',
+          # PKCS#7 with RSA-PSS (CMS RSASSA-PSS signers)
+          '--enable-pkcs7 CPPFLAGS=-DWC_RSA_PSS',
+          # PKCS#7 without RSA-PSS
+          '--enable-pkcs7',
           '--enable-opensslextra CPPFLAGS=''-DWOLFSSL_NO_CA_NAMES'' ',
           '--enable-opensslextra=x509small',
           'CPPFLAGS=''-DWOLFSSL_EXTRA'' ',
@@ -72,6 +82,7 @@ jobs:
           '--enable-sessionexport',
           '--enable-cryptocb --enable-aesgcm CPPFLAGS="-DWOLF_CRYPTO_CB_AES_SETKEY -DWOLF_CRYPTO_CB_FREE"',
           '--disable-tls --enable-cryptocb --enable-aesgcm CPPFLAGS="-DWOLF_CRYPTO_CB_AES_SETKEY -DWOLF_CRYPTO_CB_FREE"',
+          '--enable-all --enable-dilithium --enable-cryptocb --enable-cryptocbutils --enable-pkcallbacks',
           '--enable-cryptocb --enable-aesgcm CPPFLAGS="-DWOLF_CRYPTO_CB_AES_SETKEY"',
           '--disable-examples CPPFLAGS=-DWOLFSSL_NO_MALLOC',
           'CPPFLAGS=-DNO_WOLFSSL_CLIENT',
@@ -84,6 +95,11 @@ jobs:
           '--enable-all CPPFLAGS=-DWOLFSSL_NO_CLIENT_AUTH',
           '--enable-all CPPFLAGS=''-DNO_WOLFSSL_CLIENT -DWOLFSSL_NO_CLIENT_AUTH''',
           '--enable-all CPPFLAGS=''-DNO_WOLFSSL_SERVER -DWOLFSSL_NO_CLIENT_AUTH''',
+          '--enable-curve25519=nonblock --enable-ecc=nonblock --enable-sp=yes,nonblock CPPFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DEBUG_NONBLOCK"',
+          '--enable-certreq --enable-certext --enable-certgen --disable-secure-renegotiation-info CPPFLAGS="-DNO_TLS"',
+          '--enable-ocsp --enable-ocsp-responder --enable-ocspstapling CPPFLAGS="-DWOLFSSL_NONBLOCK_OCSP" --enable-maxfragment',
+          '--enable-all CPPFLAGS=-DWOLFSSL_HASH_KEEP',
+          '--enable-all --enable-writedup',
         ]
     name: make check
     if: github.repository_owner == 'wolfssl'
@@ -130,6 +146,7 @@ jobs:
           'examples/configs/user_settings_dtls13.h',
           'examples/configs/user_settings_EBSnet.h',
           'examples/configs/user_settings_eccnonblock.h',
+          'examples/configs/user_settings_curve25519nonblock.h',
           'examples/configs/user_settings_min_ecc.h',
           'examples/configs/user_settings_openssl_compat.h',
           'examples/configs/user_settings_pkcs7.h',

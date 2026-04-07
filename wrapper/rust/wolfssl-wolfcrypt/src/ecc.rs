@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -31,12 +31,12 @@ wolfSSL `ecc_key` object. It ensures proper initialization and deallocation.
 use crate::sys;
 #[cfg(random)]
 use crate::random::RNG;
-use std::mem::{MaybeUninit};
+use core::mem::{MaybeUninit};
 
 /// Rust wrapper for wolfSSL `ecc_point` object.
 pub struct ECCPoint {
     wc_ecc_point: *mut sys::ecc_point,
-    heap: *mut std::os::raw::c_void,
+    heap: *mut core::ffi::c_void,
 }
 
 impl ECCPoint {
@@ -71,7 +71,7 @@ impl ECCPoint {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_der(din: &[u8], curve_id: i32, heap: Option<*mut std::os::raw::c_void>) -> Result<Self, i32> {
+    pub fn import_der(din: &[u8], curve_id: i32, heap: Option<*mut core::ffi::c_void>) -> Result<Self, i32> {
         let curve_idx = unsafe { sys::wc_ecc_get_curve_idx(curve_id) };
         if curve_idx < 0 {
             return Err(curve_idx);
@@ -129,7 +129,7 @@ impl ECCPoint {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_der_ex(din: &[u8], curve_id: i32, short_key_size: i32, heap: Option<*mut std::os::raw::c_void>) -> Result<Self, i32> {
+    pub fn import_der_ex(din: &[u8], curve_id: i32, short_key_size: i32, heap: Option<*mut core::ffi::c_void>) -> Result<Self, i32> {
         let curve_idx = unsafe { sys::wc_ecc_get_curve_idx(curve_id) };
         if curve_idx < 0 {
             return Err(curve_idx);
@@ -251,6 +251,7 @@ impl ECCPoint {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -290,6 +291,7 @@ pub struct ECC {
     wc_ecc_key: sys::ecc_key,
 }
 
+#[cfg(ecc_curve_ids)]
 impl ECC {
     pub const CURVE_INVALID: i32 = sys::ecc_curve_ids_ECC_CURVE_INVALID;
     pub const CURVE_DEF: i32 = sys::ecc_curve_ids_ECC_CURVE_DEF;
@@ -320,6 +322,7 @@ impl ECC {
     pub const BRAINPOOLP320R1: i32 = sys::ecc_curve_ids_ECC_BRAINPOOLP320R1;
     pub const BRAINPOOLP384R1: i32 = sys::ecc_curve_ids_ECC_BRAINPOOLP384R1;
     pub const BRAINPOOLP512R1: i32 = sys::ecc_curve_ids_ECC_BRAINPOOLP512R1;
+    #[cfg(ecc_curve_sm2p256v1)]
     pub const SM2P256V1: i32 = sys::ecc_curve_ids_ECC_SM2P256V1;
     #[cfg(ecc_curve_25519)]
     pub const X25519: i32 = sys::ecc_curve_ids_ECC_X25519;
@@ -330,7 +333,53 @@ impl ECC {
     #[cfg(ecc_custom_curves)]
     pub const CURVE_CUSTOM: i32 = sys::ecc_curve_ids_ECC_CURVE_CUSTOM;
     pub const CURVE_MAX: i32 = sys::ecc_curve_ids_ECC_CURVE_MAX;
+}
 
+#[cfg(not(ecc_curve_ids))]
+impl ECC {
+    pub const CURVE_INVALID: i32 = sys::ecc_curve_id_ECC_CURVE_INVALID;
+    pub const CURVE_DEF: i32 = sys::ecc_curve_id_ECC_CURVE_DEF;
+    pub const SECP192R1: i32 = sys::ecc_curve_id_ECC_SECP192R1;
+    pub const PRIME192V2: i32 = sys::ecc_curve_id_ECC_PRIME192V2;
+    pub const PRIME192V3: i32 = sys::ecc_curve_id_ECC_PRIME192V3;
+    pub const PRIME239V1: i32 = sys::ecc_curve_id_ECC_PRIME239V1;
+    pub const PRIME239V2: i32 = sys::ecc_curve_id_ECC_PRIME239V2;
+    pub const PRIME239V3: i32 = sys::ecc_curve_id_ECC_PRIME239V3;
+    pub const SECP256R1: i32 = sys::ecc_curve_id_ECC_SECP256R1;
+    pub const SECP112R1: i32 = sys::ecc_curve_id_ECC_SECP112R1;
+    pub const SECP112R2: i32 = sys::ecc_curve_id_ECC_SECP112R2;
+    pub const SECP128R1: i32 = sys::ecc_curve_id_ECC_SECP128R1;
+    pub const SECP128R2: i32 = sys::ecc_curve_id_ECC_SECP128R2;
+    pub const SECP160R1: i32 = sys::ecc_curve_id_ECC_SECP160R1;
+    pub const SECP160R2: i32 = sys::ecc_curve_id_ECC_SECP160R2;
+    pub const SECP224R1: i32 = sys::ecc_curve_id_ECC_SECP224R1;
+    pub const SECP384R1: i32 = sys::ecc_curve_id_ECC_SECP384R1;
+    pub const SECP521R1: i32 = sys::ecc_curve_id_ECC_SECP521R1;
+    pub const SECP160K1: i32 = sys::ecc_curve_id_ECC_SECP160K1;
+    pub const SECP192K1: i32 = sys::ecc_curve_id_ECC_SECP192K1;
+    pub const SECP224K1: i32 = sys::ecc_curve_id_ECC_SECP224K1;
+    pub const SECP256K1: i32 = sys::ecc_curve_id_ECC_SECP256K1;
+    pub const BRAINPOOLP160R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP160R1;
+    pub const BRAINPOOLP192R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP192R1;
+    pub const BRAINPOOLP224R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP224R1;
+    pub const BRAINPOOLP256R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP256R1;
+    pub const BRAINPOOLP320R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP320R1;
+    pub const BRAINPOOLP384R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP384R1;
+    pub const BRAINPOOLP512R1: i32 = sys::ecc_curve_id_ECC_BRAINPOOLP512R1;
+    #[cfg(ecc_curve_sm2p256v1)]
+    pub const SM2P256V1: i32 = sys::ecc_curve_id_ECC_SM2P256V1;
+    #[cfg(ecc_curve_25519)]
+    pub const X25519: i32 = sys::ecc_curve_id_ECC_X25519;
+    #[cfg(ecc_curve_448)]
+    pub const X448: i32 = sys::ecc_curve_id_ECC_X448;
+    #[cfg(ecc_curve_sakke)]
+    pub const SAKKE_1: i32 = sys::ecc_curve_id_ECC_SAKKE_1;
+    #[cfg(ecc_custom_curves)]
+    pub const CURVE_CUSTOM: i32 = sys::ecc_curve_id_ECC_CURVE_CUSTOM;
+    pub const CURVE_MAX: i32 = sys::ecc_curve_id_ECC_CURVE_MAX;
+}
+
+impl ECC {
     pub const FLAG_NONE: i32 = sys::WC_ECC_FLAG_NONE as i32;
     pub const FLAG_COFACTOR: i32 = sys::WC_ECC_FLAG_COFACTOR as i32;
     pub const FLAG_DEC_SIGN: i32 = sys::WC_ECC_FLAG_DEC_SIGN as i32;
@@ -353,6 +402,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -363,7 +413,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(random)]
-    pub fn generate(size: i32, rng: &mut RNG, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn generate(size: i32, rng: &mut RNG, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -408,6 +458,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -420,7 +471,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(random)]
-    pub fn generate_ex(size: i32, rng: &mut RNG, curve_id: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn generate_ex(size: i32, rng: &mut RNG, curve_id: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -466,6 +517,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -478,7 +530,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(random)]
-    pub fn generate_ex2(size: i32, rng: &mut RNG, curve_id: i32, flags: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn generate_ex2(size: i32, rng: &mut RNG, curve_id: i32, flags: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -518,6 +570,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -553,6 +606,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -564,7 +618,7 @@ impl ECC {
     /// let mut ecc = ECC::import_der(&der, None, None).expect("Error with import_der()");
     /// }
     /// ```
-    pub fn import_der(der: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_der(der: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -607,6 +661,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -626,7 +681,7 @@ impl ECC {
     /// let mut ecc = ECC::import_public_der(&der, None, None).expect("Error with import_public_der()");
     /// }
     /// ```
-    pub fn import_public_der(der: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_public_der(der: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -695,7 +750,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_private_key(priv_buf: &[u8], pub_buf: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_private_key(priv_buf: &[u8], pub_buf: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -769,7 +824,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_private_key_ex(priv_buf: &[u8], pub_buf: &[u8], curve_id: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_private_key_ex(priv_buf: &[u8], pub_buf: &[u8], curve_id: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -828,7 +883,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_raw(qx: &[u8], qy: &[u8], d: &[u8], curve_name: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_raw(qx: &[u8], qy: &[u8], d: &[u8], curve_name: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -888,7 +943,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_raw_ex(qx: &[u8], qy: &[u8], d: &[u8], curve_id: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_raw_ex(qx: &[u8], qy: &[u8], d: &[u8], curve_id: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -956,7 +1011,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_unsigned(qx: &[u8], qy: &[u8], d: &[u8], curve_id: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn import_unsigned(qx: &[u8], qy: &[u8], d: &[u8], curve_id: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
@@ -1014,7 +1069,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_x963(din: &[u8], heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<ECC, i32> {
+    pub fn import_x963(din: &[u8], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<ECC, i32> {
         let din_size = din.len() as u32;
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
@@ -1078,7 +1133,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(ecc_import)]
-    pub fn import_x963_ex(din: &[u8], curve_id: i32, heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<ECC, i32> {
+    pub fn import_x963_ex(din: &[u8], curve_id: i32, heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<ECC, i32> {
         let din_size = din.len() as u32;
         let mut wc_ecc_key: MaybeUninit<sys::ecc_key> = MaybeUninit::uninit();
         let heap = match heap {
@@ -1124,6 +1179,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use std::fs;
@@ -1190,6 +1246,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use std::fs;
@@ -1242,6 +1299,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use std::fs;
@@ -1291,6 +1349,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
@@ -1595,6 +1654,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use std::fs;
@@ -1638,6 +1698,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use std::fs;
@@ -1651,7 +1712,7 @@ impl ECC {
     /// }
     /// ```
     #[cfg(random)]
-    pub fn make_pub_to_point(&mut self, rng: Option<&mut RNG>, heap: Option<*mut std::os::raw::c_void>) -> Result<ECCPoint, i32> {
+    pub fn make_pub_to_point(&mut self, rng: Option<&mut RNG>, heap: Option<*mut core::ffi::c_void>) -> Result<ECCPoint, i32> {
         let rng_ptr = match rng {
             Some(rng) => &mut rng.wc_rng,
             None => core::ptr::null_mut(),
@@ -1693,6 +1754,7 @@ impl ECC {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate std;
     /// #[cfg(random)]
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;

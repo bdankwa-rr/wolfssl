@@ -1,6 +1,6 @@
 /* ssl_certman.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1265,7 +1265,9 @@ static WC_INLINE int cm_restore_cert_row(WOLFSSL_CERT_MANAGER* cm,
 
         if (ret == 0) {
             /* Copy in certificate name. */
-            XMEMCPY(signer->name, current + idx, (size_t)signer->nameLen);
+            /* safe cast -- allocated by above XMALLOC(). */
+            XMEMCPY((void *)(wc_ptr_t)signer->name, current + idx,
+                    (size_t)signer->nameLen);
             idx += signer->nameLen;
 
             /* Copy in hash of subject name. */
@@ -2993,10 +2995,10 @@ int AddSigner(WOLFSSL_CERT_MANAGER* cm, Signer *s)
    don't allow chain ones to be added w/o isCA extension */
 int AddCA(WOLFSSL_CERT_MANAGER* cm, DerBuffer** pDer, int type, int verify)
 {
-    int         ret;
+    int         ret = 0;
     Signer*     signer = NULL;
-    word32      row;
-    byte*       subjectHash;
+    word32      row = 0;
+    byte*       subjectHash = NULL;
     WC_DECLARE_VAR(cert, DecodedCert, 1, 0);
     DerBuffer*   der = *pDer;
 

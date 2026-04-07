@@ -1,6 +1,6 @@
 /* error.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -36,6 +36,9 @@ WOLFSSL_ABI
 const char* wc_GetErrorString(int error)
 {
     switch ((enum wolfCrypt_ErrorCodes)error) {
+
+    case WC_SUCCESS:
+        return "wolfCrypt generic success";
 
     case WC_FAILURE:
         return "wolfCrypt generic failure";
@@ -664,6 +667,9 @@ const char* wc_GetErrorString(int error)
 
     case ALREADY_E:
         return "Operation was redundant or preempted";
+
+    case SEQ_OVERFLOW_E:
+        return "Sequence counter would overflow";
 
     case MAX_CODE_E:
     case WC_SPAN1_MIN_CODE_E:

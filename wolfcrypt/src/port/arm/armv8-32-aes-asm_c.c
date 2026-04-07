@@ -1,6 +1,6 @@
 /* armv8-32-aes-asm
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -4219,7 +4219,8 @@ WC_OMIT_FRAME_POINTER void AES_GCM_set_key_AARCH32(const byte* nonce,
 
     __asm__ __volatile__ (
         "vld1.8	{q0}, [%[nonce]]\n\t"
-        "vldm	%[key]!, {q1-q4}\n\t"
+        "vld1.8	{q1-q2}, [%[key]]!\n\t"
+        "vld1.8	{q3-q4}, [%[key]]!\n\t"
         "aese.8	q0, q1\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q2\n\t"
@@ -4228,7 +4229,8 @@ WC_OMIT_FRAME_POINTER void AES_GCM_set_key_AARCH32(const byte* nonce,
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q4\n\t"
         "aesmc.8	q0, q0\n\t"
-        "vldm	%[key]!, {q1-q4}\n\t"
+        "vld1.8	{q1-q2}, [%[key]]!\n\t"
+        "vld1.8	{q3-q4}, [%[key]]!\n\t"
         "aese.8	q0, q1\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q2\n\t"
@@ -4238,26 +4240,26 @@ WC_OMIT_FRAME_POINTER void AES_GCM_set_key_AARCH32(const byte* nonce,
         "aese.8	q0, q4\n\t"
         "aesmc.8	q0, q0\n\t"
         "subs	%[nr], %[nr], #10\n\t"
-        "vld1.32	{q1-q2}, [%[key]]!\n\t"
+        "vld1.8	{q1-q2}, [%[key]]!\n\t"
         "aese.8	q0, q1\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q2\n\t"
         "beq	L_aes_gcm_set_key_arm32_crypto_round_done_%=\n\t"
-        "vld1.32	{q1-q2}, [%[key]]!\n\t"
+        "vld1.8	{q1-q2}, [%[key]]!\n\t"
         "subs	%[nr], %[nr], #2\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q1\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q2\n\t"
         "beq	L_aes_gcm_set_key_arm32_crypto_round_done_%=\n\t"
-        "vld1.32	{q1-q2}, [%[key]]!\n\t"
+        "vld1.8	{q1-q2}, [%[key]]!\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q1\n\t"
         "aesmc.8	q0, q0\n\t"
         "aese.8	q0, q2\n\t"
         "\n"
     "L_aes_gcm_set_key_arm32_crypto_round_done_%=: \n\t"
-        "vld1.32	{q1}, [%[key]]\n\t"
+        "vld1.8	{q1}, [%[key]]\n\t"
         "veor	q0, q0, q1\n\t"
         "vmov.i8	q1, #0x55\n\t"
         "vshl.u8	q2, q0, #1\n\t"
@@ -12928,7 +12930,7 @@ WC_OMIT_FRAME_POINTER void AES_CBC_encrypt(const unsigned char* in,
         "eor	r5, r5, r9\n\t"
         "eor	r6, r6, r10\n\t"
         "eor	r7, r7, r11\n\t"
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
         "pop	{r1, %[len], lr}\n\t"
         "ldr	%[ks], [sp]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -13645,7 +13647,7 @@ WC_OMIT_FRAME_POINTER void AES_CBC_encrypt(const unsigned char* in,
         "eor	r5, r5, r9\n\t"
         "eor	r6, r6, r10\n\t"
         "eor	r7, r7, r11\n\t"
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
         "pop	{r1, %[len], lr}\n\t"
         "ldr	%[ks], [sp]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -14362,7 +14364,7 @@ WC_OMIT_FRAME_POINTER void AES_CBC_encrypt(const unsigned char* in,
         "eor	r5, r5, r9\n\t"
         "eor	r6, r6, r10\n\t"
         "eor	r7, r7, r11\n\t"
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
         "pop	{r1, %[len], lr}\n\t"
         "ldr	%[ks], [sp]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -17300,6 +17302,8 @@ WC_OMIT_FRAME_POINTER void AES_decrypt_block(const word32* td, int nr,
 
 #endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
 static const word32* L_AES_ARM32_td_ecb = L_AES_ARM32_td_data;
+#if defined(WOLFSSL_AES_DIRECT) || defined(WOLFSSL_AES_COUNTER) || \
+        defined(HAVE_AES_ECB)
 static const byte L_AES_ARM32_ecb_td4[] = {
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38,
     0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
@@ -17335,8 +17339,6 @@ static const byte L_AES_ARM32_ecb_td4[] = {
     0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
-#if defined(WOLFSSL_AES_DIRECT) || defined(WOLFSSL_AES_COUNTER) || \
-        defined(HAVE_AES_ECB)
 void AES_ECB_decrypt(const unsigned char* in_p, unsigned char* out_p,
     unsigned long len_p, const unsigned char* ks_p, int nr_p);
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG

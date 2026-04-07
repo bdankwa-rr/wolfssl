@@ -1,6 +1,6 @@
 /* cmac.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -228,6 +228,7 @@ int wc_CmacUpdate(Cmac* cmac, const byte* in, word32 inSz)
 #if !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
     case WC_CMAC_AES:
     {
+#ifdef HAVE_SELFTEST
         while ((ret == 0) && (inSz != 0)) {
             word32 add = min(inSz, WC_AES_BLOCK_SIZE - cmac->bufferSz);
             XMEMCPY(&cmac->buffer[cmac->bufferSz], in, add);
@@ -237,24 +238,17 @@ int wc_CmacUpdate(Cmac* cmac, const byte* in, word32 inSz)
             inSz -= add;
 
             if (cmac->bufferSz == WC_AES_BLOCK_SIZE && inSz != 0) {
-                if (cmac->totalSz != 0) {
-                    xorbuf(cmac->buffer, cmac->digest, WC_AES_BLOCK_SIZE);
-                }
-#ifndef HAVE_SELFTEST
-                ret = wc_AesEncryptDirect(&cmac->aes, cmac->digest,
-                        cmac->buffer);
-                if (ret == 0) {
-                    cmac->totalSz += WC_AES_BLOCK_SIZE;
-                    cmac->bufferSz = 0;
-                }
-#else
+                xorbuf(cmac->buffer, cmac->digest, WC_AES_BLOCK_SIZE);
                 wc_AesEncryptDirect(&cmac->aes, cmac->digest,
                         cmac->buffer);
                 cmac->totalSz += WC_AES_BLOCK_SIZE;
                 cmac->bufferSz = 0;
-#endif
             }
         }
+#else
+        (void)ret;
+        ret = wc_local_CmacUpdateAes(cmac, in, inSz);
+#endif
     }; break;
 #endif /* !NO_AES && WOLFSSL_AES_DIRECT */
     default:

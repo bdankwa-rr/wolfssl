@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,7 +26,7 @@ functionality.
 #![cfg(any(blake2b, blake2s))]
 
 use crate::sys;
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 
 /// Context for BLAKE2b computation.
 #[cfg(blake2b)]

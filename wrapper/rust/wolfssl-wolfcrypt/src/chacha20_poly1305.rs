@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,7 +26,7 @@ ChaCha20-Poly1305 functionality.
 #![cfg(chacha20_poly1305)]
 
 use crate::sys;
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 
 pub struct ChaCha20Poly1305 {
     wc_ccp: sys::ChaChaPoly_Aead,

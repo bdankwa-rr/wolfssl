@@ -1,6 +1,6 @@
 /* rsa.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -119,7 +119,7 @@ RSA keys can be used to encrypt, decrypt, sign and verify data.
         #endif
     #elif defined(WOLFSSL_SP_MATH_ALL) || defined(WOLFSSL_SP_MATH)
         /* SP implementation supports numbers of SP_INT_BITS bits. */
-        #define RSA_MAX_SIZE    (((SP_INT_BITS + 7) / 8) * 8)
+        #define RSA_MAX_SIZE    WC_BITS_FULL_BYTES(SP_INT_BITS)
         #if defined(WOLFSSL_MYSQL_COMPATIBLE) && RSA_MAX_SIZE < 8192
             #error "MySQL needs SP_INT_BITS at least at 8192"
         #endif
@@ -140,9 +140,6 @@ RSA keys can be used to encrypt, decrypt, sign and verify data.
 
 #ifdef WOLFSSL_ASYNC_CRYPT
     #include <wolfssl/wolfcrypt/async.h>
-    #ifdef WOLFSSL_CERT_GEN
-        #include <wolfssl/wolfcrypt/asn.h>
-    #endif
 #endif
 
 #if FIPS_VERSION3_GE(6,0,0)

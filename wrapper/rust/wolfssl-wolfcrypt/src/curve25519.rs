@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -28,7 +28,7 @@ functionality.
 #[cfg(random)]
 use crate::random::RNG;
 use crate::sys;
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 
 pub struct Curve25519Key {
     wc_key: sys::curve25519_key,

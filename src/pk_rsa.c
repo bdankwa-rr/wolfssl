@@ -1,6 +1,6 @@
 /* pk_rsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -924,7 +924,7 @@ int wolfSSL_RSA_LoadDer_ex(WOLFSSL_RSA* rsa, const unsigned char* derBuf,
          * have a PKCS8 header then do not error out. */
         res = ToTraditionalInline_ex((const byte*)derBuf, &idx, (word32)derSz,
             &algId);
-        if (res > 0) {
+        if (res >= 0) {
             /* Store size of PKCS#8 header for encoding. */
             WOLFSSL_MSG("Found PKCS8 header");
             rsa->pkcs8HeaderSz = (word16)idx;
@@ -3899,7 +3899,7 @@ int wolfSSL_RSA_GenAdd(WOLFSSL_RSA* rsa)
         }
     }
 
-    mp_clear(t);
+    mp_forcezero(t);
 
 #ifdef WOLFSSL_SMALL_STACK
     if (rsa != NULL) {

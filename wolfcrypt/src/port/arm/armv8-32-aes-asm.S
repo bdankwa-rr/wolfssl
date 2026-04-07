@@ -1,6 +1,6 @@
 /* armv8-32-aes-asm
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -3914,7 +3914,8 @@ L_aes_ctr_encrypt_arm32_crypto_done:
 AES_GCM_set_key_AARCH32:
 	vpush	{d8, d9}
 	vld1.8	{q0}, [r0]
-	vldm	r1!, {q1-q4}
+	vld1.8	{q1, q2}, [r1]!
+	vld1.8	{q3, q4}, [r1]!
 	aese.8	q0, q1
 	aesmc.8	q0, q0
 	aese.8	q0, q2
@@ -3923,7 +3924,8 @@ AES_GCM_set_key_AARCH32:
 	aesmc.8	q0, q0
 	aese.8	q0, q4
 	aesmc.8	q0, q0
-	vldm	r1!, {q1-q4}
+	vld1.8	{q1, q2}, [r1]!
+	vld1.8	{q3, q4}, [r1]!
 	aese.8	q0, q1
 	aesmc.8	q0, q0
 	aese.8	q0, q2
@@ -3933,25 +3935,25 @@ AES_GCM_set_key_AARCH32:
 	aese.8	q0, q4
 	aesmc.8	q0, q0
 	subs	r3, r3, #10
-	vld1.32	{q1, q2}, [r1]!
+	vld1.8	{q1, q2}, [r1]!
 	aese.8	q0, q1
 	aesmc.8	q0, q0
 	aese.8	q0, q2
 	beq	L_aes_gcm_set_key_arm32_crypto_round_done
-	vld1.32	{q1, q2}, [r1]!
+	vld1.8	{q1, q2}, [r1]!
 	subs	r3, r3, #2
 	aesmc.8	q0, q0
 	aese.8	q0, q1
 	aesmc.8	q0, q0
 	aese.8	q0, q2
 	beq	L_aes_gcm_set_key_arm32_crypto_round_done
-	vld1.32	{q1, q2}, [r1]!
+	vld1.8	{q1, q2}, [r1]!
 	aesmc.8	q0, q0
 	aese.8	q0, q1
 	aesmc.8	q0, q0
 	aese.8	q0, q2
 L_aes_gcm_set_key_arm32_crypto_round_done:
-	vld1.32	{q1}, [r1]
+	vld1.8	{q1}, [r1]
 	veor	q0, q0, q1
 	vmov.i8	q1, #0x55
 	vshl.u8	q2, q0, #1
@@ -12553,7 +12555,7 @@ L_AES_CBC_encrypt_block_nr_256:
 	eor	r5, r5, r9
 	eor	r6, r6, r10
 	eor	r7, r7, r11
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
 	pop	{r1, r2, lr}
 	ldr	r3, [sp]
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -13267,7 +13269,7 @@ L_AES_CBC_encrypt_block_nr_192:
 	eor	r5, r5, r9
 	eor	r6, r6, r10
 	eor	r7, r7, r11
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
 	pop	{r1, r2, lr}
 	ldr	r3, [sp]
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -13981,7 +13983,7 @@ L_AES_CBC_encrypt_block_nr_128:
 	eor	r5, r5, r9
 	eor	r6, r6, r10
 	eor	r7, r7, r11
-#endif /* WOLFSSL_ARMASM_AES_BLOCK_INLINE */
+#endif /* !WOLFSSL_ARMASM_AES_BLOCK_INLINE */
 	pop	{r1, r2, lr}
 	ldr	r3, [sp]
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 6)
@@ -16847,6 +16849,7 @@ L_AES_decrypt_block_nr:
 	.align	4
 L_AES_ARM32_td_ecb:
 	.word	L_AES_ARM32_td_data
+#if defined(WOLFSSL_AES_DIRECT) || defined(WOLFSSL_AES_COUNTER) || defined(HAVE_AES_ECB)
 	.text
 	.type	L_AES_ARM32_ecb_td4, %object
 	.size	L_AES_ARM32_ecb_td4, 256
@@ -17108,7 +17111,6 @@ L_AES_ARM32_ecb_td4:
 	.byte	0x21
 	.byte	0xc
 	.byte	0x7d
-#if defined(WOLFSSL_AES_DIRECT) || defined(WOLFSSL_AES_COUNTER) || defined(HAVE_AES_ECB)
 	.text
 	.align	4
 	.globl	AES_ECB_decrypt

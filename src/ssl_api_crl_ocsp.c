@@ -1,6 +1,6 @@
 /* ssl_api_crl_ocsp.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -424,7 +424,7 @@ int wolfSSL_get_ocsp_producedDate_tm(WOLFSSL *ssl, struct tm *produced_tm) {
 
     if (ExtractDate(ssl->ocspProducedDate,
             (unsigned char)ssl->ocspProducedDateFormat, produced_tm, &idx,
-            MAX_DATE_SZ))
+            MAX_DATE_SIZE))
         return 0;
     else
         return ASN_PARSE_E;

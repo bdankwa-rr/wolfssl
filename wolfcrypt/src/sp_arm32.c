@@ -1,6 +1,6 @@
 /* sp.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -5656,7 +5656,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_2048_sub_in_place_64(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x100\n\t"
         "\n"
-    "L_sp_2048_sub_in_pkace_64_word_%=: \n\t"
+    "L_sp_2048_sub_in_place_64_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -5667,7 +5667,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_2048_sub_in_place_64(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_2048_sub_in_pkace_64_word_%=\n\t"
+        "bne	L_sp_2048_sub_in_place_64_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -6162,7 +6162,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_2048_sub_in_place_32(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x80\n\t"
         "\n"
-    "L_sp_2048_sub_in_pkace_32_word_%=: \n\t"
+    "L_sp_2048_sub_in_place_32_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -6173,7 +6173,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_2048_sub_in_place_32(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_2048_sub_in_pkace_32_word_%=\n\t"
+        "bne	L_sp_2048_sub_in_place_32_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -9943,15 +9943,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_2048_mont_reduce_32(
 #endif
         "ldr	r10, [%[a], #124]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -9959,11 +9959,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_2048_mont_reduce_32(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -12500,9 +12500,9 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -12653,9 +12653,9 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -14909,15 +14909,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_2048_mont_reduce_64(
 #endif
         "ldr	r10, [%[a], #252]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -14925,11 +14925,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_2048_mont_reduce_64(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -17366,9 +17366,9 @@ static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -17502,9 +17502,9 @@ static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -17706,6 +17706,7 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
 }
 
 #ifndef WOLFSSL_RSA_PUBLIC_ONLY
+#if !defined(SP_RSA_PRIVATE_EXP_D) && !defined(RSA_LOW_MEM)
 #ifdef WOLFSSL_SP_SMALL
 /* Conditionally add a and b using the mask m.
  * m is -1 to add and 0 when not.
@@ -17911,6 +17912,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_2048_cond_add_32(sp_digit* r,
 }
 
 #endif /* WOLFSSL_SP_SMALL */
+#endif /* !SP_RSA_PRIVATE_EXP_D && !RSA_LOW_MEM */
 /* RSA private key operation.
  *
  * in      Array of bytes representing the number to exponentiate, base.
@@ -18646,9 +18648,9 @@ static int sp_2048_mod_exp_2_64(sp_digit* r, const sp_digit* e, int bits,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -29069,7 +29071,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_3072_sub_in_place_96(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x180\n\t"
         "\n"
-    "L_sp_3072_sub_in_pkace_96_word_%=: \n\t"
+    "L_sp_3072_sub_in_place_96_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -29080,7 +29082,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_3072_sub_in_place_96(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_3072_sub_in_pkace_96_word_%=\n\t"
+        "bne	L_sp_3072_sub_in_place_96_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -29575,7 +29577,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_3072_sub_in_place_48(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0xc0\n\t"
         "\n"
-    "L_sp_3072_sub_in_pkace_48_word_%=: \n\t"
+    "L_sp_3072_sub_in_place_48_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -29586,7 +29588,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_3072_sub_in_place_48(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_3072_sub_in_pkace_48_word_%=\n\t"
+        "bne	L_sp_3072_sub_in_place_48_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -34900,15 +34902,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_3072_mont_reduce_48(
 #endif
         "ldr	r10, [%[a], #188]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -34916,11 +34918,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_3072_mont_reduce_48(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -38353,9 +38355,9 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -38506,9 +38508,9 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -41802,15 +41804,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_3072_mont_reduce_96(
 #endif
         "ldr	r10, [%[a], #380]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -41818,11 +41820,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_3072_mont_reduce_96(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -45088,9 +45090,9 @@ static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -45224,9 +45226,9 @@ static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -45428,6 +45430,7 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
 }
 
 #ifndef WOLFSSL_RSA_PUBLIC_ONLY
+#if !defined(SP_RSA_PRIVATE_EXP_D) && !defined(RSA_LOW_MEM)
 #ifdef WOLFSSL_SP_SMALL
 /* Conditionally add a and b using the mask m.
  * m is -1 to add and 0 when not.
@@ -45689,6 +45692,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_3072_cond_add_48(sp_digit* r,
 }
 
 #endif /* WOLFSSL_SP_SMALL */
+#endif /* !SP_RSA_PRIVATE_EXP_D && !RSA_LOW_MEM */
 /* RSA private key operation.
  *
  * in      Array of bytes representing the number to exponentiate, base.
@@ -46616,9 +46620,9 @@ static int sp_3072_mod_exp_2_96(sp_digit* r, const sp_digit* e, int bits,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -47635,7 +47639,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_4096_sub_in_place_128(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x200\n\t"
         "\n"
-    "L_sp_4096_sub_in_pkace_128_word_%=: \n\t"
+    "L_sp_4096_sub_in_place_128_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -47646,7 +47650,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_4096_sub_in_place_128(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_4096_sub_in_pkace_128_word_%=\n\t"
+        "bne	L_sp_4096_sub_in_place_128_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -56584,15 +56588,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_4096_mont_reduce_128(
 #endif
         "ldr	r10, [%[a], #508]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -56600,11 +56604,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_4096_mont_reduce_128(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -60694,9 +60698,9 @@ static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -60830,9 +60834,9 @@ static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -61034,6 +61038,7 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
 }
 
 #ifndef WOLFSSL_RSA_PUBLIC_ONLY
+#if !defined(SP_RSA_PRIVATE_EXP_D) && !defined(RSA_LOW_MEM)
 #ifdef WOLFSSL_SP_SMALL
 /* Conditionally add a and b using the mask m.
  * m is -1 to add and 0 when not.
@@ -61351,6 +61356,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_4096_cond_add_64(sp_digit* r,
 }
 
 #endif /* WOLFSSL_SP_SMALL */
+#endif /* !SP_RSA_PRIVATE_EXP_D && !RSA_LOW_MEM */
 /* RSA private key operation.
  *
  * in      Array of bytes representing the number to exponentiate, base.
@@ -62470,9 +62476,9 @@ static int sp_4096_mod_exp_2_128(sp_digit* r, const sp_digit* e, int bits,
             c = -c;
             y = (byte)(n << c);
             n = e[i--];
-            y |= (byte)(n >> (64 - c));
+            y |= (byte)(n >> (32 - c));
             n <<= c;
-            c = 64 - c;
+            c = 32 - c;
         }
         else if (c == 0) {
             /* All bits in top word used. */
@@ -73166,15 +73172,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_256_mont_reduce_8(sp_digit* a,
 #endif
         "ldr	r10, [%[a], #28]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -73182,11 +73188,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_256_mont_reduce_8(sp_digit* a,
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -73854,15 +73860,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_256_mont_reduce_order_8(
 #endif
         "ldr	r10, [%[a], #28]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -73870,11 +73876,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_256_mont_reduce_order_8(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -74917,15 +74923,15 @@ static int sp_256_proj_point_add_8_nb(sp_ecc_ctx_t* sp_ctx, sp_point_256* r,
     int err = FP_WOULDBLOCK;
     sp_256_proj_point_add_8_ctx* ctx = (sp_256_proj_point_add_8_ctx*)sp_ctx->data;
 
+    typedef char ctx_size_test[sizeof(sp_256_proj_point_add_8_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
+    (void)sizeof(ctx_size_test);
+
     /* Ensure only the first point is the same as the result. */
     if (q == r) {
         const sp_point_256* a = p;
         p = q;
         q = a;
     }
-
-    typedef char ctx_size_test[sizeof(sp_256_proj_point_add_8_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
-    (void)sizeof(ctx_size_test);
 
     switch (ctx->state) {
     case 0: /* INIT */
@@ -75614,7 +75620,9 @@ static void sp_256_get_entry_16_8(sp_point_256* r,
     r->y[6] = 0;
     r->y[7] = 0;
     for (i = 1; i < 16; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -75866,10 +75874,6 @@ static int sp_256_ecc_mulmod_8(sp_point_256* r, const sp_point_256* g,
         if (cache->cnt == 2)
             sp_256_gen_stripe_table_8(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_256_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_256_ecc_mulmod_fast_8(r, g, k, map, ct, heap);
         }
@@ -75877,6 +75881,9 @@ static int sp_256_ecc_mulmod_8(sp_point_256* r, const sp_point_256* g,
             err = sp_256_ecc_mulmod_stripe_8(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_256_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -75994,7 +76001,9 @@ static void sp_256_get_entry_256_8(sp_point_256* r,
     r->y[6] = 0;
     r->y[7] = 0;
     for (i = 1; i < 256; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -76246,10 +76255,6 @@ static int sp_256_ecc_mulmod_8(sp_point_256* r, const sp_point_256* g,
         if (cache->cnt == 2)
             sp_256_gen_stripe_table_8(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_256_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_256_ecc_mulmod_fast_8(r, g, k, map, ct, heap);
         }
@@ -76257,6 +76262,9 @@ static int sp_256_ecc_mulmod_8(sp_point_256* r, const sp_point_256* g,
             err = sp_256_ecc_mulmod_stripe_8(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_256_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -78274,7 +78282,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_256_sub_in_place_8(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #32\n\t"
         "\n"
-    "L_sp_256_sub_in_pkace_8_word_%=: \n\t"
+    "L_sp_256_sub_in_place_8_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -78285,7 +78293,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_256_sub_in_place_8(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_256_sub_in_pkace_8_word_%=\n\t"
+        "bne	L_sp_256_sub_in_place_8_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -79146,7 +79154,7 @@ static int sp_256_mont_inv_order_8_nb(sp_ecc_ctx_t* sp_ctx, sp_digit* r, const s
             sp_256_mont_mul_order_8(t, t, a);
         }
         ctx->i--;
-        ctx->state = (ctx->i == 0) ? 3 : 1;
+        ctx->state = (ctx->i >= 0) ? 1 : 3;
         break;
     case 3:
         XMEMCPY(r, t, sizeof(sp_digit) * 8U);
@@ -91133,15 +91141,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_384_mont_reduce_12(sp_digit* a,
 #endif
         "ldr	r10, [%[a], #44]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -91149,11 +91157,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_384_mont_reduce_12(sp_digit* a,
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -92908,15 +92916,15 @@ static int sp_384_proj_point_add_12_nb(sp_ecc_ctx_t* sp_ctx, sp_point_384* r,
     int err = FP_WOULDBLOCK;
     sp_384_proj_point_add_12_ctx* ctx = (sp_384_proj_point_add_12_ctx*)sp_ctx->data;
 
+    typedef char ctx_size_test[sizeof(sp_384_proj_point_add_12_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
+    (void)sizeof(ctx_size_test);
+
     /* Ensure only the first point is the same as the result. */
     if (q == r) {
         const sp_point_384* a = p;
         p = q;
         q = a;
     }
-
-    typedef char ctx_size_test[sizeof(sp_384_proj_point_add_12_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
-    (void)sizeof(ctx_size_test);
 
     switch (ctx->state) {
     case 0: /* INIT */
@@ -93637,7 +93645,9 @@ static void sp_384_get_entry_16_12(sp_point_384* r,
     r->y[10] = 0;
     r->y[11] = 0;
     for (i = 1; i < 16; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -93897,10 +93907,6 @@ static int sp_384_ecc_mulmod_12(sp_point_384* r, const sp_point_384* g,
         if (cache->cnt == 2)
             sp_384_gen_stripe_table_12(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_384_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_384_ecc_mulmod_fast_12(r, g, k, map, ct, heap);
         }
@@ -93908,6 +93914,9 @@ static int sp_384_ecc_mulmod_12(sp_point_384* r, const sp_point_384* g,
             err = sp_384_ecc_mulmod_stripe_12(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_384_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -94033,7 +94042,9 @@ static void sp_384_get_entry_256_12(sp_point_384* r,
     r->y[10] = 0;
     r->y[11] = 0;
     for (i = 1; i < 256; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -94293,10 +94304,6 @@ static int sp_384_ecc_mulmod_12(sp_point_384* r, const sp_point_384* g,
         if (cache->cnt == 2)
             sp_384_gen_stripe_table_12(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_384_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_384_ecc_mulmod_fast_12(r, g, k, map, ct, heap);
         }
@@ -94304,6 +94311,9 @@ static int sp_384_ecc_mulmod_12(sp_point_384* r, const sp_point_384* g,
             err = sp_384_ecc_mulmod_stripe_12(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_384_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -96327,7 +96337,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_384_sub_in_place_12(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #48\n\t"
         "\n"
-    "L_sp_384_sub_in_pkace_12_word_%=: \n\t"
+    "L_sp_384_sub_in_place_12_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -96338,7 +96348,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_384_sub_in_place_12(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_384_sub_in_pkace_12_word_%=\n\t"
+        "bne	L_sp_384_sub_in_place_12_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -97338,7 +97348,7 @@ static int sp_384_mont_inv_order_12_nb(sp_ecc_ctx_t* sp_ctx, sp_digit* r, const 
             sp_384_mont_mul_order_12(t, t, a);
         }
         ctx->i--;
-        ctx->state = (ctx->i == 0) ? 3 : 1;
+        ctx->state = (ctx->i >= 0) ? 1 : 3;
         break;
     case 3:
         XMEMCPY(r, t, sizeof(sp_digit) * 12U);
@@ -118060,15 +118070,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_521_mont_reduce_order_17(
 #endif
         "ldr	r10, [%[a], #64]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "adcs	r5, r3, #0\n\t"
+        "adcs	r5, r5, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -118076,11 +118086,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_521_mont_reduce_order_17(
         "adcs	r5, r5, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -119402,9 +119412,23 @@ WC_OMIT_FRAME_POINTER static void sp_521_mont_tpl_17(sp_digit* r,
         "sub	%[r], %[r], #0x44\n\t"
         "ldm	%[r], {r4, r5, r6, r7, r8, r9, r10, r11}\n\t"
         "adds	r4, r4, r2\n\t"
-        "adcs	r4, r4, #0\n\t"
+        "adcs	r5, r5, #0\n\t"
+        "adcs	r6, r6, #0\n\t"
+        "adcs	r7, r7, #0\n\t"
+        "adcs	r8, r8, #0\n\t"
+        "adcs	r9, r9, #0\n\t"
+        "adcs	r10, r10, #0\n\t"
+        "adcs	r11, r11, #0\n\t"
         "stm	%[r]!, {r4, r5, r6, r7, r8, r9, r10, r11}\n\t"
         "ldm	%[r], {r4, r5, r6, r7, r8, r9, r10, r11}\n\t"
+        "adcs	r4, r4, #0\n\t"
+        "adcs	r5, r5, #0\n\t"
+        "adcs	r6, r6, #0\n\t"
+        "adcs	r7, r7, #0\n\t"
+        "adcs	r8, r8, #0\n\t"
+        "adcs	r9, r9, #0\n\t"
+        "adcs	r10, r10, #0\n\t"
+        "adcs	r11, r11, #0\n\t"
         "stm	%[r]!, {r4, r5, r6, r7, r8, r9, r10, r11}\n\t"
         "ldm	%[r], {r4}\n\t"
         "adcs	r4, r4, #0\n\t"
@@ -119987,15 +120011,15 @@ static int sp_521_proj_point_add_17_nb(sp_ecc_ctx_t* sp_ctx, sp_point_521* r,
     int err = FP_WOULDBLOCK;
     sp_521_proj_point_add_17_ctx* ctx = (sp_521_proj_point_add_17_ctx*)sp_ctx->data;
 
+    typedef char ctx_size_test[sizeof(sp_521_proj_point_add_17_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
+    (void)sizeof(ctx_size_test);
+
     /* Ensure only the first point is the same as the result. */
     if (q == r) {
         const sp_point_521* a = p;
         p = q;
         q = a;
     }
-
-    typedef char ctx_size_test[sizeof(sp_521_proj_point_add_17_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
-    (void)sizeof(ctx_size_test);
 
     switch (ctx->state) {
     case 0: /* INIT */
@@ -120407,7 +120431,17 @@ static int sp_521_ecc_mulmod_fast_17(sp_point_521* r, const sp_point_521* g, con
         }
         y = k[0] & 0x1;
         sp_521_proj_point_dbl_17(rt, rt, tmp);
-        sp_521_proj_point_add_17(rt, rt, &t[y], tmp);
+    #ifndef WC_NO_CACHE_RESISTANT
+        if (ct) {
+            sp_521_get_point_16_17(p, t, y);
+            p->infinity = !y;
+            sp_521_proj_point_add_17(rt, rt, p, tmp);
+        }
+        else
+    #endif
+        {
+            sp_521_proj_point_add_17(rt, rt, &t[y], tmp);
+        }
 
         if (map != 0) {
             sp_521_map_17(r, rt, tmp);
@@ -120760,7 +120794,9 @@ static void sp_521_get_entry_16_17(sp_point_521* r,
     r->y[15] = 0;
     r->y[16] = 0;
     for (i = 1; i < 16; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -121030,10 +121066,6 @@ static int sp_521_ecc_mulmod_17(sp_point_521* r, const sp_point_521* g,
         if (cache->cnt == 2)
             sp_521_gen_stripe_table_17(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_521_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_521_ecc_mulmod_fast_17(r, g, k, map, ct, heap);
         }
@@ -121041,6 +121073,9 @@ static int sp_521_ecc_mulmod_17(sp_point_521* r, const sp_point_521* g,
             err = sp_521_ecc_mulmod_stripe_17(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_521_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -121176,7 +121211,9 @@ static void sp_521_get_entry_256_17(sp_point_521* r,
     r->y[15] = 0;
     r->y[16] = 0;
     for (i = 1; i < 256; i++) {
-        mask = (sp_digit)0 - (i == idx);
+        sp_digit gte = (sp_digit)((((sp_uint32)i - (sp_uint32)idx) >> 31) - 1);
+        sp_digit lte = (sp_digit)((((sp_uint32)idx - (sp_uint32)i) >> 31) - 1);
+        mask = gte & lte;
         r->x[0] |= mask & table[i].x[0];
         r->x[1] |= mask & table[i].x[1];
         r->x[2] |= mask & table[i].x[2];
@@ -121446,10 +121483,6 @@ static int sp_521_ecc_mulmod_17(sp_point_521* r, const sp_point_521* g,
         if (cache->cnt == 2)
             sp_521_gen_stripe_table_17(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_521_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_521_ecc_mulmod_fast_17(r, g, k, map, ct, heap);
         }
@@ -121457,6 +121490,9 @@ static int sp_521_ecc_mulmod_17(sp_point_521* r, const sp_point_521* g,
             err = sp_521_ecc_mulmod_stripe_17(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_521_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -124035,77 +124071,77 @@ WC_OMIT_FRAME_POINTER static void sp_521_rshift_17(sp_digit* r,
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
         "ldr	r6, [%[a], #8]\n\t"
-        "str	r4, [%[a]]\n\t"
+        "str	r4, [%[r]]\n\t"
         "lsl	r3, r6, r12\n\t"
         "lsr	r6, r6, %[n]\n\t"
         "orr	r5, r5, r3\n\t"
         "ldr	r4, [%[a], #12]\n\t"
-        "str	r5, [%[a], #4]\n\t"
+        "str	r5, [%[r], #4]\n\t"
         "lsl	r3, r4, r12\n\t"
         "lsr	r4, r4, %[n]\n\t"
         "orr	r6, r6, r3\n\t"
         "ldr	r5, [%[a], #16]\n\t"
-        "str	r6, [%[a], #8]\n\t"
+        "str	r6, [%[r], #8]\n\t"
         "lsl	r3, r5, r12\n\t"
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
         "ldr	r6, [%[a], #20]\n\t"
-        "str	r4, [%[a], #12]\n\t"
+        "str	r4, [%[r], #12]\n\t"
         "lsl	r3, r6, r12\n\t"
         "lsr	r6, r6, %[n]\n\t"
         "orr	r5, r5, r3\n\t"
         "ldr	r4, [%[a], #24]\n\t"
-        "str	r5, [%[a], #16]\n\t"
+        "str	r5, [%[r], #16]\n\t"
         "lsl	r3, r4, r12\n\t"
         "lsr	r4, r4, %[n]\n\t"
         "orr	r6, r6, r3\n\t"
         "ldr	r5, [%[a], #28]\n\t"
-        "str	r6, [%[a], #20]\n\t"
+        "str	r6, [%[r], #20]\n\t"
         "lsl	r3, r5, r12\n\t"
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
         "ldr	r6, [%[a], #32]\n\t"
-        "str	r4, [%[a], #24]\n\t"
+        "str	r4, [%[r], #24]\n\t"
         "lsl	r3, r6, r12\n\t"
         "lsr	r6, r6, %[n]\n\t"
         "orr	r5, r5, r3\n\t"
         "ldr	r4, [%[a], #36]\n\t"
-        "str	r5, [%[a], #28]\n\t"
+        "str	r5, [%[r], #28]\n\t"
         "lsl	r3, r4, r12\n\t"
         "lsr	r4, r4, %[n]\n\t"
         "orr	r6, r6, r3\n\t"
         "ldr	r5, [%[a], #40]\n\t"
-        "str	r6, [%[a], #32]\n\t"
+        "str	r6, [%[r], #32]\n\t"
         "lsl	r3, r5, r12\n\t"
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
         "ldr	r6, [%[a], #44]\n\t"
-        "str	r4, [%[a], #36]\n\t"
+        "str	r4, [%[r], #36]\n\t"
         "lsl	r3, r6, r12\n\t"
         "lsr	r6, r6, %[n]\n\t"
         "orr	r5, r5, r3\n\t"
         "ldr	r4, [%[a], #48]\n\t"
-        "str	r5, [%[a], #40]\n\t"
+        "str	r5, [%[r], #40]\n\t"
         "lsl	r3, r4, r12\n\t"
         "lsr	r4, r4, %[n]\n\t"
         "orr	r6, r6, r3\n\t"
         "ldr	r5, [%[a], #52]\n\t"
-        "str	r6, [%[a], #44]\n\t"
+        "str	r6, [%[r], #44]\n\t"
         "lsl	r3, r5, r12\n\t"
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
         "ldr	r6, [%[a], #56]\n\t"
-        "str	r4, [%[a], #48]\n\t"
+        "str	r4, [%[r], #48]\n\t"
         "lsl	r3, r6, r12\n\t"
         "lsr	r6, r6, %[n]\n\t"
         "orr	r5, r5, r3\n\t"
         "ldr	r4, [%[a], #60]\n\t"
-        "str	r5, [%[a], #52]\n\t"
+        "str	r5, [%[r], #52]\n\t"
         "lsl	r3, r4, r12\n\t"
         "lsr	r4, r4, %[n]\n\t"
         "orr	r6, r6, r3\n\t"
         "ldr	r5, [%[a], #64]\n\t"
-        "str	r6, [%[a], #56]\n\t"
+        "str	r6, [%[r], #56]\n\t"
         "lsl	r3, r5, r12\n\t"
         "lsr	r5, r5, %[n]\n\t"
         "orr	r4, r4, r3\n\t"
@@ -124513,7 +124549,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_521_sub_in_place_17(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x40\n\t"
         "\n"
-    "L_sp_521_sub_in_pkace_17_word_%=: \n\t"
+    "L_sp_521_sub_in_place_17_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -124524,7 +124560,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_521_sub_in_place_17(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_521_sub_in_pkace_17_word_%=\n\t"
+        "bne	L_sp_521_sub_in_place_17_word_%=\n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2}\n\t"
         "ldm	%[b]!, {r6}\n\t"
@@ -125709,7 +125745,7 @@ static int sp_521_mont_inv_order_17_nb(sp_ecc_ctx_t* sp_ctx, sp_digit* r, const 
             sp_521_mont_mul_order_17(t, t, a);
         }
         ctx->i--;
-        ctx->state = (ctx->i == 0) ? 3 : 1;
+        ctx->state = (ctx->i >= 0) ? 1 : 3;
         break;
     case 3:
         XMEMCPY(r, t, sizeof(sp_digit) * 17U);
@@ -144301,7 +144337,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_1024_sub_in_place_32(sp_digit* a,
         "mov	r12, #0\n\t"
         "add	lr, %[a], #0x80\n\t"
         "\n"
-    "L_sp_1024_sub_in_pkace_32_word_%=: \n\t"
+    "L_sp_1024_sub_in_place_32_word_%=: \n\t"
         "rsbs	r12, r12, #0\n\t"
         "ldm	%[a], {r2, r3, r4, r5}\n\t"
         "ldm	%[b]!, {r6, r7, r8, r9}\n\t"
@@ -144312,7 +144348,7 @@ WC_OMIT_FRAME_POINTER static sp_digit sp_1024_sub_in_place_32(sp_digit* a,
         "stm	%[a]!, {r2, r3, r4, r5}\n\t"
         "sbc	r12, r12, r12\n\t"
         "cmp	%[a], lr\n\t"
-        "bne	L_sp_1024_sub_in_pkace_32_word_%=\n\t"
+        "bne	L_sp_1024_sub_in_place_32_word_%=\n\t"
         "mov	%[a], r12\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [a] "+r" (a), [b] "+r" (b)
@@ -147683,15 +147719,15 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_1024_mont_reduce_32(
 #endif
         "ldr	r10, [%[a], #124]\n\t"
         "lsl	r6, r8, #16\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r5, r5, r7\n\t"
-        "adcs	r4, r3, #0\n\t"
+        "adcs	r4, r4, #0\n\t"
         "mov	r3, #0\n\t"
         "adc	r3, r3, r3\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
         "lsr	r7, r6, #16\n\t"
         "lsl	r6, r6, #16\n\t"
@@ -147699,11 +147735,11 @@ WC_OMIT_FRAME_POINTER static SP_NOINLINE void sp_1024_mont_reduce_32(
         "adcs	r4, r4, r7\n\t"
         "adc	r3, r3, #0\n\t"
         "mov	r6, r8\n\t"
-        "lsr	r7, r11, #16\n\t"
+        "lsr	r7, r7, #16\n\t"
         "lsr	r6, r6, #16\n\t"
         "mul	r7, r6, r7\n\t"
         "adds	r4, r4, r7\n\t"
-        "lsl	r7, r11, #16\n\t"
+        "lsl	r7, r7, #16\n\t"
         "adc	r3, r3, #0\n\t"
         "lsr	r7, r7, #16\n\t"
         "mul	r6, r7, r6\n\t"
@@ -150008,15 +150044,15 @@ static int sp_1024_proj_point_add_32_nb(sp_ecc_ctx_t* sp_ctx, sp_point_1024* r,
     int err = FP_WOULDBLOCK;
     sp_1024_proj_point_add_32_ctx* ctx = (sp_1024_proj_point_add_32_ctx*)sp_ctx->data;
 
+    typedef char ctx_size_test[sizeof(sp_1024_proj_point_add_32_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
+    (void)sizeof(ctx_size_test);
+
     /* Ensure only the first point is the same as the result. */
     if (q == r) {
         const sp_point_1024* a = p;
         p = q;
         q = a;
     }
-
-    typedef char ctx_size_test[sizeof(sp_1024_proj_point_add_32_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
-    (void)sizeof(ctx_size_test);
 
     switch (ctx->state) {
     case 0: /* INIT */
@@ -150797,10 +150833,6 @@ static int sp_1024_ecc_mulmod_32(sp_point_1024* r, const sp_point_1024* g,
         if (cache->cnt == 2)
             sp_1024_gen_stripe_table_32(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_1024_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_1024_ecc_mulmod_fast_32(r, g, k, map, ct, heap);
         }
@@ -150808,6 +150840,9 @@ static int sp_1024_ecc_mulmod_32(sp_point_1024* r, const sp_point_1024* g,
             err = sp_1024_ecc_mulmod_stripe_32(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_1024_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);
@@ -151112,10 +151147,6 @@ static int sp_1024_ecc_mulmod_32(sp_point_1024* r, const sp_point_1024* g,
         if (cache->cnt == 2)
             sp_1024_gen_stripe_table_32(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_1024_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_1024_ecc_mulmod_fast_32(r, g, k, map, ct, heap);
         }
@@ -151123,6 +151154,9 @@ static int sp_1024_ecc_mulmod_32(sp_point_1024* r, const sp_point_1024* g,
             err = sp_1024_ecc_mulmod_stripe_32(r, g, cache->table, k,
                     map, ct, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_1024_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     SP_FREE_VAR(tmp, heap, DYNAMIC_TYPE_ECC);

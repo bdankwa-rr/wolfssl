@@ -1,6 +1,6 @@
 /* pk_ec.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1532,7 +1532,7 @@ int wolfSSL_ECPoint_d2i(const unsigned char *in, unsigned int len,
             ret = 0;
         }
 
-        /* wolfSSL_EC_POINT_set_affine_coordinates_GFp check that the point is
+        /* wolfSSL_EC_POINT_set_affine_coordinates_GFp checks that the point is
          * on the curve. */
         if (ret == 1 && wolfSSL_EC_POINT_set_affine_coordinates_GFp(group,
                 point, x, y, NULL) != 1) {
@@ -1544,6 +1544,18 @@ int wolfSSL_ECPoint_d2i(const unsigned char *in, unsigned int len,
                     "operations later on.");
 #endif
     }
+#if !defined(HAVE_SELFTEST) && (!defined(HAVE_FIPS) || FIPS_VERSION_GT(2,0))
+    /* Validate that the imported point lies on the curve.  The Z!=1 path
+     * above validates via set_affine_coordinates_GFp, but for affine
+     * imports (Z==1), the common case for uncompressed points, that
+     * block is skipped.  Check unconditionally so no import path can
+     * bypass validation. */
+    if (ret == 1 && wolfSSL_EC_POINT_is_on_curve(group,
+            (WOLFSSL_EC_POINT *)point, NULL) != 1) {
+        WOLFSSL_MSG("wolfSSL_ECPoint_d2i: point not on curve");
+        ret = 0;
+    }
+#endif
 
     if (ret == 1) {
         /* Dump new point. */
@@ -1750,8 +1762,7 @@ WOLFSSL_BIGNUM *wolfSSL_EC_POINT_point2bn(const WOLFSSL_EC_GROUP* group,
     return ret;
 }
 
-#if defined(USE_ECC_B_PARAM) && !defined(HAVE_SELFTEST) && \
-    (!defined(HAVE_FIPS) || FIPS_VERSION_GT(2,0))
+#if !defined(HAVE_SELFTEST) && (!defined(HAVE_FIPS) || FIPS_VERSION_GT(2,0))
 /* Check if EC point is on the the curve defined by the EC group.
  *
  * @param [in] group  EC group defining curve.
@@ -1792,7 +1803,7 @@ int wolfSSL_EC_POINT_is_on_curve(const WOLFSSL_EC_GROUP *group,
     /* Return boolean of on curve. No error means on curve. */
     return !err;
 }
-#endif /* USE_ECC_B_PARAM && !HAVE_SELFTEST && !(FIPS_VERSION <= 2) */
+#endif /* !HAVE_SELFTEST && !(HAVE_FIPS && FIPS_VERSION <= 2) */
 
 #if !defined(WOLFSSL_SP_MATH) && !defined(WOLF_CRYPTO_CB_ONLY_ECC)
 /* Convert Jacobian ordinates to affine.
@@ -1985,8 +1996,7 @@ int wolfSSL_EC_POINT_set_affine_coordinates_GFp(const WOLFSSL_EC_GROUP* group,
         ret = 0;
     }
 
-#if defined(USE_ECC_B_PARAM) && !defined(HAVE_SELFTEST) && \
-    (!defined(HAVE_FIPS) || FIPS_VERSION_GT(2,0))
+#if !defined(HAVE_SELFTEST) && (!defined(HAVE_FIPS) || FIPS_VERSION_GT(2,0))
     /* Check that the point is valid. */
     if ((ret == 1) && (wolfSSL_EC_POINT_is_on_curve(group,
             (WOLFSSL_EC_POINT *)point, ctx) != 1)) {
@@ -2824,6 +2834,37 @@ int wolfSSL_EC_POINT_copy(WOLFSSL_EC_POINT *dest, const WOLFSSL_EC_POINT *src)
     return ret;
 }
 
+/* Duplicates an EC point.
+ *
+ * @param [in] src    EC point to duplicate.
+ * @param [in] group  EC group for the new point.
+ * @return  New EC point on success.
+ * @return  NULL on failure.
+ */
+WOLFSSL_EC_POINT *wolfSSL_EC_POINT_dup(const WOLFSSL_EC_POINT *src,
+    const WOLFSSL_EC_GROUP *group)
+{
+    WOLFSSL_EC_POINT *dest;
+
+    WOLFSSL_ENTER("wolfSSL_EC_POINT_dup");
+
+    if ((src == NULL) || (group == NULL)) {
+        return NULL;
+    }
+
+    dest = wolfSSL_EC_POINT_new(group);
+    if (dest == NULL) {
+        return NULL;
+    }
+
+    if (wolfSSL_EC_POINT_copy(dest, src) != 1) {
+        wolfSSL_EC_POINT_free(dest);
+        return NULL;
+    }
+
+    return dest;
+}
+
 /* Checks whether point is at infinity.
  *
  * Return code compliant with OpenSSL.
@@ -3550,7 +3591,7 @@ int wolfSSL_EC_KEY_LoadDer_ex(WOLFSSL_EC_KEY* key, const unsigned char* derBuf,
          * have a PKCS8 header then do not error out.
          */
         if ((ret = ToTraditionalInline_ex((const byte*)derBuf, &idx,
-                (word32)derSz, &algId)) > 0) {
+                (word32)derSz, &algId)) >= 0) {
             WOLFSSL_MSG("Found PKCS8 header");
             key->pkcs8HeaderSz = (word16)idx;
             res = 1;
@@ -4867,18 +4908,16 @@ WOLFSSL_ECDSA_SIG *wolfSSL_ECDSA_SIG_new(void)
         DYNAMIC_TYPE_ECC);
     if (sig == NULL) {
         WOLFSSL_MSG("wolfSSL_ECDSA_SIG_new malloc ECDSA signature failure");
-        err = 1;
+        return NULL;
     }
 
-    if (!err) {
-        /* Set s to NULL in case of error. */
-        sig->s = NULL;
-        /* Allocate BN into r. */
-        sig->r = wolfSSL_BN_new();
-        if (sig->r == NULL) {
-            WOLFSSL_MSG("wolfSSL_ECDSA_SIG_new malloc ECDSA r failure");
-            err = 1;
-        }
+    /* Set s to NULL in case of error. */
+    sig->s = NULL;
+    /* Allocate BN into r. */
+    sig->r = wolfSSL_BN_new();
+    if (sig->r == NULL) {
+        WOLFSSL_MSG("wolfSSL_ECDSA_SIG_new malloc ECDSA r failure");
+        err = 1;
     }
     if (!err) {
         /* Allocate BN into s. */
@@ -4889,7 +4928,7 @@ WOLFSSL_ECDSA_SIG *wolfSSL_ECDSA_SIG_new(void)
         }
     }
 
-    if (err && (sig != NULL)) {
+    if (err) {
         /* Dispose of allocated memory. */
         wolfSSL_ECDSA_SIG_free(sig);
         sig = NULL;
@@ -5019,7 +5058,7 @@ int wolfSSL_i2d_ECDSA_SIG(const WOLFSSL_ECDSA_SIG *sig, unsigned char **pp)
         #ifdef WOLFSSL_I2D_ECDSA_SIG_ALLOC
         if ((pp != NULL) && (*pp == NULL)) {
             *pp = (unsigned char *)XMALLOC(len, NULL, DYNAMIC_TYPE_OPENSSL);
-            if (*pp != NULL) {
+            if (*pp == NULL) {
                 WOLFSSL_MSG("malloc error");
                 return 0;
             }
@@ -5235,6 +5274,14 @@ int wolfSSL_ECDSA_do_verify(const unsigned char *dgst, int dLen,
         ret = WOLFSSL_FATAL_ERROR;
     }
 
+    /* Check hash length */
+    if ((ret == 1) &&
+        ((dLen > WC_MAX_DIGEST_SIZE) ||
+         (dLen < WC_MIN_DIGEST_SIZE))) {
+        WOLFSSL_MSG("wolfSSL_ECDSA_do_verify Bad digest size");
+        ret = WOLFSSL_FATAL_ERROR;
+    }
+
     /* Ensure internal EC key is set from external. */
     if ((ret == 1) && (key->inSet == 0)) {
         WOLFSSL_MSG("No EC key internal set, do it");
@@ -5356,6 +5403,14 @@ int wolfSSL_ECDSA_verify(int type, const unsigned char *digest, int digestSz,
 
     /* Validate parameters. */
     if (key == NULL) {
+        ret = 0;
+    }
+
+    /* Check hash length */
+    if ((ret == 1) &&
+        ((digestSz > WC_MAX_DIGEST_SIZE) ||
+         (digestSz < WC_MIN_DIGEST_SIZE))) {
+        WOLFSSL_MSG("wolfSSL_ECDSA_verify Bad digest size");
         ret = 0;
     }
 

@@ -1,6 +1,6 @@
 /* dtls13.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -93,7 +93,7 @@ typedef struct Dtls13RecordPlaintextHeader {
 #define DTLS13_SEQ_8_LEN 1
 
 /* fixed bits mask to detect unified header  */
-#define DTLS13_FIXED_BITS_MASK (0x111 << 5)
+#define DTLS13_FIXED_BITS_MASK (0x7 << 5)
 /* fixed bits value to detect unified header  */
 #define DTLS13_FIXED_BITS (0x1 << 5)
 /* ConnectionID present bit in the unified header flags */
@@ -473,7 +473,7 @@ static int Dtls13SendNow(WOLFSSL* ssl, enum HandShakeType handshakeType)
 
     if (handshakeType == client_hello || handshakeType == hello_retry_request ||
         handshakeType == finished || handshakeType == session_ticket ||
-        handshakeType == session_ticket || handshakeType == key_update ||
+        handshakeType == key_update ||
         (handshakeType == certificate_request &&
             ssl->options.handShakeState == HANDSHAKE_DONE))
         return 1;
@@ -720,9 +720,14 @@ static Dtls13RecordNumber* Dtls13NewRecordNumber(w64wrapper epoch,
     return rn;
 }
 
+#ifndef DTLS13_MAX_ACK_RECORDS
+#define DTLS13_MAX_ACK_RECORDS 512
+#endif
+
 int Dtls13RtxAddAck(WOLFSSL* ssl, w64wrapper epoch, w64wrapper seq)
 {
     Dtls13RecordNumber* rn;
+    int count;
 
     WOLFSSL_ENTER("Dtls13RtxAddAck");
 
@@ -734,9 +739,21 @@ int Dtls13RtxAddAck(WOLFSSL* ssl, w64wrapper epoch, w64wrapper seq)
         Dtls13RecordNumber** prevNext = &ssl->dtls13Rtx.seenRecords;
         Dtls13RecordNumber* cur = ssl->dtls13Rtx.seenRecords;
 
+        if (ssl->dtls13Rtx.seenRecordsCount >= DTLS13_ACK_MAX_RECORDS) {
+    #ifdef WOLFSSL_RW_THREADED
+            wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+    #endif
+            return 0; /* list full, silently drop */
+        }
+
+        count = 0;
         for (; cur != NULL; prevNext = &cur->next, cur = cur->next) {
+            count++;
             if (w64Equal(cur->epoch, epoch) && w64Equal(cur->seq, seq)) {
                 /* already in list. no duplicates. */
+    #ifdef WOLFSSL_RW_THREADED
+                wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+    #endif
                 return 0;
             }
             else if (w64LT(epoch, cur->epoch)
@@ -746,12 +763,27 @@ int Dtls13RtxAddAck(WOLFSSL* ssl, w64wrapper epoch, w64wrapper seq)
             }
         }
 
+        /* Cap the ACK list to prevent word16 overflow in
+         * Dtls13GetAckListLength and bound memory consumption */
+        if (count >= DTLS13_MAX_ACK_RECORDS) {
+            WOLFSSL_MSG("DTLS 1.3 ACK list full, dropping record");
+        #ifdef WOLFSSL_RW_THREADED
+            wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+        #endif
+            return 0;
+        }
+
         rn = Dtls13NewRecordNumber(epoch, seq, ssl->heap);
-        if (rn == NULL)
+        if (rn == NULL) {
+    #ifdef WOLFSSL_RW_THREADED
+            wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+    #endif
             return MEMORY_E;
+        }
 
         *prevNext = rn;
         rn->next = cur;
+        ssl->dtls13Rtx.seenRecordsCount++;
     #ifdef WOLFSSL_RW_THREADED
         wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
     #endif
@@ -781,6 +813,7 @@ static void Dtls13RtxFlushAcks(WOLFSSL* ssl)
         }
 
         ssl->dtls13Rtx.seenRecords = NULL;
+        ssl->dtls13Rtx.seenRecordsCount = 0;
     #ifdef WOLFSSL_RW_THREADED
         wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
     #endif
@@ -830,6 +863,11 @@ static void Dtls13RtxRemoveCurAck(WOLFSSL* ssl)
 {
     Dtls13RecordNumber *rn, **prevNext;
 
+#ifdef WOLFSSL_RW_THREADED
+    if (wc_LockMutex(&ssl->dtls13Rtx.mutex) != 0)
+        return;
+#endif
+
     prevNext = &ssl->dtls13Rtx.seenRecords;
     rn = ssl->dtls13Rtx.seenRecords;
 
@@ -838,12 +876,21 @@ static void Dtls13RtxRemoveCurAck(WOLFSSL* ssl)
             w64Equal(rn->seq, ssl->keys.curSeq)) {
             *prevNext = rn->next;
             XFREE(rn, ssl->heap, DYNAMIC_TYPE_DTLS_MSG);
+            if (ssl->dtls13Rtx.seenRecordsCount > 0)
+                ssl->dtls13Rtx.seenRecordsCount--;
+#ifdef WOLFSSL_RW_THREADED
+            wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+#endif
             return;
         }
 
         prevNext = &rn->next;
         rn = rn->next;
     }
+
+#ifdef WOLFSSL_RW_THREADED
+    wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
+#endif
 }
 
 static void Dtls13MaybeSaveClientHello(WOLFSSL* ssl)
@@ -1010,7 +1057,11 @@ static int Dtls13SendFragmentedInternal(WOLFSSL* ssl)
             fragLength + DTLS_HANDSHAKE_HEADER_SZ, isEncrypted);
         if (outputSz < 0) {
             Dtls13FreeFragmentsBuffer(ssl);
-            return recordLength;
+            return outputSz;
+        }
+        if ((word32)outputSz > WOLFSSL_MAX_16BIT) {
+            Dtls13FreeFragmentsBuffer(ssl);
+            return BUFFER_E;
         }
 
         ret = CheckAvailableSize(ssl, outputSz);
@@ -1072,7 +1123,7 @@ static int Dtls13SendFragmented(WOLFSSL* ssl, byte* message, word16 length,
     isEncrypted = Dtls13TypeIsEncrypted(handshake_type);
     rlHeaderLength = Dtls13GetRlHeaderLength(ssl, isEncrypted);
 
-    if (length < rlHeaderLength)
+    if (length < rlHeaderLength + DTLS_HANDSHAKE_HEADER_SZ)
         return INCOMPLETE_DATA;
 
     /* DTLSv1.3 do not consider fragmentation for hash transcript. Build the
@@ -1606,6 +1657,10 @@ static int Dtls13RtxSendBuffered(WOLFSSL* ssl)
         if (!w64IsZero(r->epoch))
             sendSz += MAX_MSG_EXTRA;
 
+        if ((word32)sendSz > WOLFSSL_MAX_16BIT) {
+            return BUFFER_E;
+        }
+
         ret = CheckAvailableSize(ssl, sendSz);
         if (ret != 0)
             return ret;
@@ -2034,8 +2089,21 @@ int Dtls13HandshakeSend(WOLFSSL* ssl, byte* message, word16 outputSize,
     maxFrag = wolfssl_local_GetMaxPlaintextSize(ssl);
     maxLen = length;
 
-    if (handshakeType == key_update)
+    if (handshakeType == key_update) {
         ssl->dtls13WaitKeyUpdateAck = 1;
+#ifdef HAVE_WRITE_DUP
+        /* Notify the read side so it can watch for the ACK on our behalf. */
+        if (ssl->dupWrite != NULL && ssl->dupSide == WRITE_DUP_SIDE) {
+            if (wc_LockMutex(&ssl->dupWrite->dupMutex) != 0)
+                return BAD_MUTEX_E;
+            ssl->dupWrite->keyUpdateEpoch = ssl->dtls13Epoch;
+            ssl->dupWrite->keyUpdateSeq =
+                ssl->dtls13EncryptEpoch->nextSeqNumber;
+            ssl->dupWrite->keyUpdateWaiting = 1;
+            wc_UnLockMutex(&ssl->dupWrite->dupMutex);
+        }
+#endif /* HAVE_WRITE_DUP */
+    }
 
     if (maxLen < maxFrag) {
         ret = Dtls13SendOneFragmentRtx(ssl, handshakeType, outputSize, message,
@@ -2169,7 +2237,7 @@ static void Dtls13EpochCopyKeys(WOLFSSL* ssl, Dtls13Epoch* e, Keys* k, int side)
     byte clientWrite, serverWrite;
     byte enc, dec;
 
-    WOLFSSL_ENTER("Dtls13SetEpochKeys");
+    WOLFSSL_ENTER("Dtls13EpochCopyKeys");
 
     clientWrite = serverWrite = 0;
     enc = dec = 0;
@@ -2531,38 +2599,25 @@ int Dtls13SetRecordNumberKeys(WOLFSSL* ssl, enum encrypt_side side)
     return NOT_COMPILED_IN;
 }
 
-/* 64 bits epoch + 64 bits sequence */
-#define DTLS13_RN_SIZE 16
-
-static int Dtls13GetAckListLength(Dtls13RecordNumber* list, word16* length)
-{
-    int numberElements;
-
-    numberElements = 0;
-
-    /* TODO: check that we don't exceed the maximum length */
-
-    while (list != NULL) {
-        list = list->next;
-        numberElements++;
-    }
-
-    *length = (word16)(DTLS13_RN_SIZE * numberElements);
-    return 0;
-}
 
 int Dtls13WriteAckMessage(WOLFSSL* ssl,
-    Dtls13RecordNumber* recordNumberList, word32* length)
+    Dtls13RecordNumber* recordNumberList, word16 recordsCount, word32* length)
 {
     word16 msgSz, headerLength;
     byte *output, *ackMessage;
     word32 sendSz;
+    word32 written;
     int ret;
 
     sendSz = 0;
+    written = 0;
 
     if (ssl->dtls13EncryptEpoch == NULL)
         return BAD_STATE_E;
+
+    if (recordsCount > DTLS13_ACK_MAX_RECORDS)
+        return BUFFER_E;
+    msgSz = (word16)(DTLS13_RN_SIZE * recordsCount);
 
     if (w64IsZero(ssl->dtls13EncryptEpoch->epochNumber)) {
         /* unprotected ACK */
@@ -2572,10 +2627,6 @@ int Dtls13WriteAckMessage(WOLFSSL* ssl,
         headerLength = Dtls13GetRlHeaderLength(ssl, 1);
         sendSz += MAX_MSG_EXTRA;
     }
-
-    ret = Dtls13GetAckListLength(recordNumberList, &msgSz);
-    if (ret != 0)
-        return ret;
 
     sendSz += headerLength;
 
@@ -2599,6 +2650,8 @@ int Dtls13WriteAckMessage(WOLFSSL* ssl,
     WOLFSSL_MSG("write ack records");
 
     while (recordNumberList != NULL) {
+        if (written + DTLS13_RN_SIZE > msgSz)
+            return BUFFER_E;
         WOLFSSL_MSG_EX("epoch %d seq %d", recordNumberList->epoch,
                 recordNumberList->seq);
         c64toa(&recordNumberList->epoch, ackMessage);
@@ -2606,7 +2659,11 @@ int Dtls13WriteAckMessage(WOLFSSL* ssl,
         c64toa(&recordNumberList->seq, ackMessage);
         ackMessage += OPAQUE64_LEN;
         recordNumberList = recordNumberList->next;
+        written += DTLS13_RN_SIZE;
     }
+
+    if (written != msgSz)
+        return BUFFER_E;
 
     *length = msgSz + OPAQUE16_LEN;
 
@@ -2656,7 +2713,7 @@ static void Dtls13PrintRtxRecord(Dtls13RtxRecord* r)
 }
 #endif /* WOLFSSL_DEBUG_TLS */
 
-static void Dtls13RtxRemoveRecord(WOLFSSL* ssl, w64wrapper epoch,
+void Dtls13RtxRemoveRecord(WOLFSSL* ssl, w64wrapper epoch,
     w64wrapper seq)
 {
     Dtls13RtxRecord *r, **prevNext;
@@ -2706,9 +2763,29 @@ int Dtls13DoScheduledWork(WOLFSSL* ssl)
     ret = wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
 #endif
     if (sendAcks) {
-        ret = SendDtls13Ack(ssl);
-        if (ret != 0)
-            return ret;
+#ifdef HAVE_WRITE_DUP
+        /* The read side cannot encrypt.  Transfer the seenRecords list to the
+         * shared WriteDup struct so the write side sends the ACK instead. */
+        if (ssl->dupWrite != NULL && ssl->dupSide == READ_DUP_SIDE) {
+            struct Dtls13RecordNumber** tail = NULL;
+            if (wc_LockMutex(&ssl->dupWrite->dupMutex) != 0)
+                return BAD_MUTEX_E;
+            tail = (struct Dtls13RecordNumber**)&ssl->dupWrite->sendAckList;
+            while (*tail != NULL)
+                tail = &(*tail)->next;
+            *tail = ssl->dtls13Rtx.seenRecords;
+            ssl->dtls13Rtx.seenRecords = NULL;
+            ssl->dtls13Rtx.seenRecordsCount = 0;
+            ssl->dupWrite->sendAcks = 1;
+            wc_UnLockMutex(&ssl->dupWrite->dupMutex);
+        }
+        else
+#endif /* HAVE_WRITE_DUP */
+        {
+            ret = SendDtls13Ack(ssl);
+            if (ret != 0)
+                return ret;
+        }
     }
 
     if (ssl->dtls13Rtx.retransmit) {
@@ -2824,6 +2901,22 @@ int DoDtls13Ack(WOLFSSL* ssl, const byte* input, word32 inputSize,
         ato64(ackMessage + i + OPAQUE64_LEN, &seq);
         WOLFSSL_MSG_EX("epoch %d seq %d", epoch, seq);
         Dtls13RtxRemoveRecord(ssl, epoch, seq);
+#ifdef HAVE_WRITE_DUP
+        /* Read side: check if this ACK covers the write side's pending KeyUpdate.
+         * Match on both epoch AND seq to avoid false positives from data records
+         * in the same epoch (sent while dtls13WaitKeyUpdateAck == 1). */
+        if (ssl->dupWrite != NULL && ssl->dupSide == READ_DUP_SIDE) {
+            if (wc_LockMutex(&ssl->dupWrite->dupMutex) != 0)
+                return BAD_MUTEX_E;
+            if (ssl->dupWrite->keyUpdateWaiting &&
+                    w64Equal(epoch, ssl->dupWrite->keyUpdateEpoch) &&
+                    w64Equal(seq,   ssl->dupWrite->keyUpdateSeq)) {
+                ssl->dupWrite->keyUpdateAcked = 1;
+                ssl->dupWrite->keyUpdateWaiting = 0;
+            }
+            wc_UnLockMutex(&ssl->dupWrite->dupMutex);
+        }
+#endif /* HAVE_WRITE_DUP */
     }
 
     /* last client flight was completely acknowledged by the server. Handshake
@@ -2896,12 +2989,13 @@ int SendDtls13Ack(WOLFSSL* ssl)
     if (ret < 0)
         return ret;
 #endif
-    ret = Dtls13WriteAckMessage(ssl, ssl->dtls13Rtx.seenRecords, &length);
+    ret = Dtls13WriteAckMessage(ssl, ssl->dtls13Rtx.seenRecords,
+        ssl->dtls13Rtx.seenRecordsCount, &length);
 #ifdef WOLFSSL_RW_THREADED
     wc_UnLockMutex(&ssl->dtls13Rtx.mutex);
 #endif
-        if (ret != 0)
-            return ret;
+    if (ret != 0)
+        return ret;
 
     output = GetOutputBuffer(ssl);
 

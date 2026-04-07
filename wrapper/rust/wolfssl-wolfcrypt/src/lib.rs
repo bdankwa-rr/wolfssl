@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#![no_std]
+
 /* bindgen-generated bindings to the C library */
 pub mod sys;
 
@@ -27,6 +29,7 @@ pub mod chacha20_poly1305;
 pub mod cmac;
 pub mod curve25519;
 pub mod dh;
+pub mod dilithium;
 pub mod ecc;
 pub mod ed25519;
 pub mod ed448;
@@ -34,6 +37,8 @@ pub mod fips;
 pub mod hkdf;
 pub mod hmac;
 pub mod kdf;
+pub mod lms;
+pub mod mlkem;
 pub mod prf;
 pub mod random;
 pub mod rsa;

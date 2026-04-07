@@ -1,6 +1,6 @@
 /* ssl_api_pk.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -226,7 +226,6 @@ static int check_cert_key(const DerBuffer* cert, const DerBuffer* key,
         InitDecodedCert_ex(der, cert->buffer, cert->length, heap, devId);
         /* Parse certificate. */
         if (ParseCertRelative(der, CERT_TYPE, NO_VERIFY, NULL, NULL) != 0) {
-            WC_FREE_VAR_EX(der, heap, DYNAMIC_TYPE_DCERT);
             ret = 0;
         }
      }

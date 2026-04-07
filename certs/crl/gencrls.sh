@@ -236,9 +236,66 @@ openssl ca -config ../renewcerts/wolfssl.cnf -gencrl -crldays 1000 -out extra-cr
 check_result $?
 
 # metadata
-echo "Step 30"
+echo "Step 31"
 openssl crl -in extra-crls/large_crlnum2.pem -text > tmp
 check_result $?
 mv tmp extra-crls/large_crlnum2.pem
+
+# OCSP root-ca CRL (empty, no revocations)
+cp blank.index.txt demoCA/index.txt
+
+echo "Step 31"
+openssl ca -config ../renewcerts/wolfssl.cnf -gencrl -crldays 1000 -out ../ocsp/root-ca-crl.pem -keyfile ../ocsp/root-ca-key.pem -cert ../ocsp/root-ca-cert.pem
+check_result $?
+
+# metadata
+echo "Step 32"
+openssl crl -in ../ocsp/root-ca-crl.pem -text > tmp
+check_result $?
+mv tmp ../ocsp/root-ca-crl.pem
+
+echo "Step 33 larger CRL number( 57 octets )"
+python3 -c "print('4' * 114)" > crlnumber # 0x41 * 57 = 114 hex chars crlnumber
+openssl ca -config ../renewcerts/wolfssl.cnf -gencrl -crldays 1000 -out extra-crls/crlnum_57oct.pem -keyfile ../ca-key.pem -cert ../ca-cert.pem
+check_result $?
+# metadata
+echo "Step 34"
+openssl crl -in extra-crls/crlnum_57oct.pem -text > tmp
+check_result $?
+mv tmp extra-crls/crlnum_57oct.pem
+
+echo "Step 35 larger CRL number( 64 octets )"
+python3 -c "print('4' * 128)" > crlnumber # 0x41 * 64 = 128 hex chars crlnumber
+openssl ca -config ../renewcerts/wolfssl.cnf -gencrl -crldays 1000 -out extra-crls/crlnum_64oct.pem -keyfile ../ca-key.pem -cert ../ca-cert.pem
+check_result $?
+
+# metadata
+echo "Step 36"
+openssl crl -in extra-crls/crlnum_64oct.pem -text > tmp
+check_result $?
+mv tmp extra-crls/crlnum_64oct.pem
+
+# CRL with revoked-entry reason extension for parser/cleanup tests.
+cp blank.index.txt demoCA/index.txt
+# Reset CRL number state so this test fixture is independent of the
+# preceding large-CRL-number steps.
+echo "01" > crlnumber
+echo "01" > ../crl/crlnumber
+echo "Step 37 reason-extension CRL revoke"
+openssl ca -config ../renewcerts/wolfssl.cnf -revoke ../server-cert.pem \
+    -crl_reason keyCompromise -keyfile ../ca-key.pem -cert ../ca-cert.pem
+check_result $?
+
+echo "Step 38 reason-extension CRL"
+openssl ca -config ../renewcerts/wolfssl.cnf -gencrl -crldays 3650 \
+    -out crl_reason.pem -keyfile ../ca-key.pem -cert ../ca-cert.pem
+check_result $?
+
+# metadata
+echo "Step 39"
+openssl crl -in crl_reason.pem -text > tmp
+check_result $?
+mv tmp crl_reason.pem
+cp blank.index.txt demoCA/index.txt
 
 exit 0

@@ -1,6 +1,6 @@
 /* async.c
  *
- * Copyright (C) 2006-2023 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -268,6 +268,28 @@ static int wolfAsync_DoSw(WC_ASYNC_DEV* asyncDev)
             break;
         }
 #endif /* !NO_DES3 */
+#ifdef HAVE_CURVE25519
+        case ASYNC_SW_X25519_MAKE:
+        {
+            ret = wc_curve25519_make_key(
+                (WC_RNG*)sw->x25519Make.rng,
+                sw->x25519Make.size,
+                (curve25519_key*)sw->x25519Make.key
+            );
+            break;
+        }
+        case ASYNC_SW_X25519_SHARED_SEC:
+        {
+            ret = wc_curve25519_shared_secret_ex(
+                (curve25519_key*)sw->x25519SharedSec.priv,
+                (curve25519_key*)sw->x25519SharedSec.pub,
+                sw->x25519SharedSec.out,
+                sw->x25519SharedSec.outLen,
+                sw->x25519SharedSec.endian
+            );
+            break;
+        }
+#endif /* HAVE_CURVE25519 */
         default:
             WOLFSSL_MSG("Invalid async crypt SW type!");
             ret = BAD_FUNC_ARG;
@@ -683,7 +705,11 @@ int wolfAsync_EventQueuePoll(WOLF_EVENT_QUEUE* queue, void* context_filter,
                             event->ret = wolfAsync_DoSw(asyncDev);
                         }
                 #elif defined(WOLF_CRYPTO_CB) || defined(HAVE_PK_CALLBACKS)
-                    /* Use crypto or PK callbacks */
+                    /* Crypto/PK callbacks manage their own retry state.
+                     * Leave event->ret as WC_PENDING_E so that
+                     * wolfSSL_AsyncPop can detect the pending state and
+                     * remove the event, allowing the operation to be
+                     * retried with a fresh callback invocation. */
 
                 #else
                     #warning No async crypt device defined!

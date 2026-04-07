@@ -1,6 +1,6 @@
 /* x509_str.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -317,6 +317,11 @@ static void SetupStoreCtxError_ex(WOLFSSL_X509_STORE_CTX* ctx, int ret,
                                                                     int depth)
 {
     int error = GetX509Error(ret);
+
+    /* Do not overwrite a previously recorded error with success; preserve
+     * the worst-seen error across the chain walk. */
+    if (error == 0 && ctx->error != 0)
+        return;
 
     wolfSSL_X509_STORE_CTX_set_error(ctx, error);
     wolfSSL_X509_STORE_CTX_set_error_depth(ctx, depth);
@@ -635,8 +640,13 @@ int wolfSSL_X509_verify_cert(WOLFSSL_X509_STORE_CTX* ctx)
                 if (ctx->store->verify_cb) {
                     ret = ctx->store->verify_cb(0, ctx);
                     if (ret != WOLFSSL_SUCCESS) {
+                        ret = WOLFSSL_FAILURE;
                         goto exit;
                     }
+                }
+                else {
+                    ret = WOLFSSL_FAILURE;
+                    goto exit;
                 }
             } else
         #endif
@@ -738,6 +748,33 @@ exit:
     }
     if (certsToUse != NULL) {
         wolfSSL_sk_X509_free(certsToUse);
+    }
+
+    /* Enforce hostname / IP verification from X509_VERIFY_PARAM if set.
+     * Always check against the leaf (end-entity) certificate, captured in
+     * orig before the chain-building loop modified ctx->current_cert. */
+    if (ctx->param != NULL) {
+        if (ret == WOLFSSL_SUCCESS && ctx->param->hostName[0] != '\0') {
+            if (wolfSSL_X509_check_host(orig,
+                    ctx->param->hostName,
+                    XSTRLEN(ctx->param->hostName),
+                    ctx->param->hostFlags, NULL) != WOLFSSL_SUCCESS) {
+                ctx->error = WOLFSSL_X509_V_ERR_HOSTNAME_MISMATCH;
+                ctx->error_depth = 0;
+                ctx->current_cert = orig;
+                ret = WOLFSSL_FAILURE;
+            }
+        }
+        if (ret == WOLFSSL_SUCCESS && ctx->param->ipasc[0] != '\0') {
+            if (wolfSSL_X509_check_ip_asc(orig,
+                    ctx->param->ipasc,
+                    ctx->param->hostFlags) != WOLFSSL_SUCCESS) {
+                ctx->error = WOLFSSL_X509_V_ERR_IP_ADDRESS_MISMATCH;
+                ctx->error_depth = 0;
+                ctx->current_cert = orig;
+                ret = WOLFSSL_FAILURE;
+            }
+        }
     }
 
     return ret == WOLFSSL_SUCCESS ? WOLFSSL_SUCCESS : WOLFSSL_FAILURE;
@@ -2147,4 +2184,3 @@ int wolfSSL_X509_STORE_set1_param(WOLFSSL_X509_STORE *ctx,
 #endif /* !WOLFCRYPT_ONLY */
 
 #endif /* !WOLFSSL_X509_STORE_INCLUDED */
-

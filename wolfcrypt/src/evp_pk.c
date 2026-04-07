@@ -1,6 +1,6 @@
 /* evp_pk.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -67,14 +67,19 @@ static int d2i_make_pkey(WOLFSSL_EVP_PKEY** out, const unsigned char* mem,
 
     /* Set the size and allocate memory for key data to be copied into. */
     pkey->pkey_sz = (int)memSz;
-    pkey->pkey.ptr = (char*)XMALLOC((size_t)memSz, NULL,
-        priv ? DYNAMIC_TYPE_PRIVATE_KEY : DYNAMIC_TYPE_PUBLIC_KEY);
-    if (pkey->pkey.ptr == NULL) {
-        ret = 0;
+    if (memSz > 0) {
+        pkey->pkey.ptr = (char*)XMALLOC((size_t)memSz, NULL,
+            priv ? DYNAMIC_TYPE_PRIVATE_KEY : DYNAMIC_TYPE_PUBLIC_KEY);
+        if (pkey->pkey.ptr == NULL) {
+            ret = 0;
+        }
+        if (ret == 1) {
+            /* Copy in key data. */
+            XMEMCPY(pkey->pkey.ptr, mem, memSz);
+        }
     }
     if (ret == 1) {
-        /* Copy in key data, set key type passed in and return object. */
-        XMEMCPY(pkey->pkey.ptr, mem, memSz);
+        /* Set key type passed in and return object. */
         pkey->type = type;
         *out = pkey;
     }
@@ -901,7 +906,7 @@ static WOLFSSL_EVP_PKEY* d2i_evp_pkey(int type, WOLFSSL_EVP_PKEY** out,
         /* Check if input buffer has PKCS8 header. In the case that it does not
          * have a PKCS8 header then do not error out. */
         if ((ret = ToTraditionalInline_ex((const byte*)(*in), &idx,
-                (word32)inSz, &algId)) > 0) {
+                (word32)inSz, &algId)) >= 0) {
             WOLFSSL_MSG("Found PKCS8 header");
             pkcs8HeaderSz = (word16)idx;
 

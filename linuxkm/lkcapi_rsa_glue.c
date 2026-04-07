@@ -1,7 +1,7 @@
 /* lkcapi_rsa_glue.c -- glue logic to register RSA wolfCrypt implementations
  * with the Linux Kernel Cryptosystem
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -2935,7 +2935,9 @@ test_pkcs1_end:
         pr_info("info: %s, %d, %d: self test returned: %d\n", driver,
                 nbits, key_len, ret);
     }
-    #endif /* WOLFKM_DEBUG_RSA */
+    #else /* !WOLFKM_DEBUG_RSA */
+    (void)skipped;
+    #endif /* !WOLFKM_DEBUG_RSA */
 
     return test_rc;
 }
@@ -3292,7 +3294,9 @@ test_pkcs1_end:
         pr_info("info: %s, %d, %d: self test returned: %d\n", driver,
                 nbits, key_len, ret);
     }
-    #endif /* WOLFKM_DEBUG_RSA */
+    #else /* !WOLFKM_DEBUG_RSA */
+    (void)skipped;
+    #endif /* !WOLFKM_DEBUG_RSA */
 
     return test_rc;
 }

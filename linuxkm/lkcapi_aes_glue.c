@@ -1,6 +1,6 @@
 /* lkcapi_aes_glue.c -- glue logic for AES modes
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -296,7 +296,7 @@ static int km_AesInitCommon(
     if (! ctx->aes_encrypt) {
         pr_err("%s: allocation of %zu bytes for encryption key failed.\n",
                name, sizeof(*ctx->aes_encrypt));
-        err = -MEMORY_E;
+        err = -ENOMEM;
         goto out;
     }
 
@@ -319,7 +319,7 @@ static int km_AesInitCommon(
         if (! ctx->aes_decrypt) {
             pr_err("%s: allocation of %zu bytes for decryption key failed.\n",
                    name, sizeof(*ctx->aes_decrypt));
-            err = -MEMORY_E;
+            err = -ENOMEM;
             goto out;
         }
 
@@ -341,7 +341,7 @@ static int km_AesInitCommon(
     if (! ctx->aes_encrypt_C) {
         pr_err("%s: allocation of %zu bytes for encryption key failed.\n",
                name, sizeof(*ctx->aes_encrypt_C));
-        err = -MEMORY_E;
+        err = -ENOMEM;
         goto out;
     }
 
@@ -490,8 +490,8 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
     err = wc_AesSetKey(ctx->aes_encrypt, in_key, key_len, NULL, AES_ENCRYPTION);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
-            pr_err("%s: wc_AesSetKey for encryption key failed: %d\n", name, err);
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
+            pr_err("%s: wc_AesSetKey for encryption key (len %u) failed: %d\n", name, key_len, err);
         return -EINVAL;
     }
 
@@ -500,9 +500,9 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
                            AES_DECRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
-                pr_err("%s: wc_AesSetKey for decryption key failed: %d\n",
-                       name, err);
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
+                pr_err("%s: wc_AesSetKey for decryption key (len %u) failed: %d\n",
+                       name, key_len, err);
             return -EINVAL;
         }
     }
@@ -515,7 +515,7 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
         err = wc_AesSetKey(ctx->aes_encrypt_C, in_key, key_len, NULL, AES_ENCRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesSetKey for encryption key failed: %d\n", name, err);
             return -EINVAL;
         }
@@ -532,7 +532,7 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
                            AES_DECRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesSetKey for decryption key failed: %d\n",
                        name, err);
             return -EINVAL;
@@ -666,7 +666,7 @@ static int km_AesCbcDecrypt(struct skcipher_request *req)
 
     if (unlikely(err)) {
         if (! disable_setkey_warnings)
-            pr_err("%s: wc_AesSetKey failed: %d\n",
+            pr_err("%s: wc_AesSetIV failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_skcipher_tfm(tfm)), err);
         err = -EINVAL;
         goto out;
@@ -929,7 +929,7 @@ static int km_AesGcmSetKey(struct crypto_aead *tfm, const u8 *in_key,
     err = wc_AesGcmSetKey(ctx->aes_encrypt, in_key, key_len);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
         return -EINVAL;
@@ -942,7 +942,7 @@ static int km_AesGcmSetKey(struct crypto_aead *tfm, const u8 *in_key,
         err = wc_AesGcmSetKey(ctx->aes_encrypt_C, in_key, key_len);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                        crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
             return -EINVAL;
@@ -977,7 +977,7 @@ static int km_AesGcmSetKey_Rfc4106(struct crypto_aead *tfm, const u8 *in_key,
     err = wc_AesGcmSetKey(ctx->aes_encrypt, in_key, key_len);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
         return -EINVAL;
@@ -990,7 +990,7 @@ static int km_AesGcmSetKey_Rfc4106(struct crypto_aead *tfm, const u8 *in_key,
         err = wc_AesGcmSetKey(ctx->aes_encrypt_C, in_key, key_len);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                        crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
             return -EINVAL;
@@ -1148,12 +1148,11 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         assoc = scatterwalk_map(&assocSgWalk);
 #endif
         if (unlikely(IS_ERR(assoc))) {
+            err = (int)PTR_ERR(assoc);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
                    PTR_ERR(assoc));
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
-            scatterwalk_unmap(&assocSgWalk);
-#endif
+            assoc = NULL;
             goto out;
         }
     }
@@ -1355,12 +1354,11 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         in_map = scatterwalk_map(&in_walk);
 #endif
         if (unlikely(IS_ERR(in_map))) {
+            err = (int)PTR_ERR(in_map);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
-                   PTR_ERR(assoc));
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
+                   PTR_ERR(in_map));
             in_map = NULL;
-#endif
             goto out;
         }
         assoc = in_map;
@@ -1374,12 +1372,11 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         out_map = scatterwalk_map(&out_walk);
 #endif
         if (unlikely(IS_ERR(out_map))) {
+            err = (int)PTR_ERR(out_map);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
-                   PTR_ERR(assoc));
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
+                   PTR_ERR(out_map));
             out_map = NULL;
-#endif
             goto out;
         }
         out_text = out_map + req->assoclen;
@@ -1577,7 +1574,7 @@ static int km_AesXtsInitCommon(struct km_AesXtsCtx * ctx, const char * name)
     ctx->aesXts = (XtsAes *)malloc(sizeof(*ctx->aesXts));
 
     if (! ctx->aesXts)
-        return -MEMORY_E;
+        return -ENOMEM;
 
     err = wc_AesXtsInit(ctx->aesXts, NULL, INVALID_DEVID);
 
@@ -1615,7 +1612,7 @@ static int km_AesXtsSetKey(struct crypto_skcipher *tfm, const u8 *in_key,
                                 AES_ENCRYPTION_AND_DECRYPTION);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesXtsSetKeyNoInit failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_skcipher_tfm(tfm)), err);
         return -EINVAL;

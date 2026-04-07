@@ -1,6 +1,6 @@
 /* pkcs7.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -386,6 +386,13 @@ struct wc_PKCS7 {
 
 #if defined(HAVE_PKCS7_ECC_RAW_SIGN_CALLBACK) && defined(HAVE_ECC)
     CallbackEccSignRawDigest eccSignRawDigestCb;
+#endif
+
+#if defined(WC_RSA_PSS) && !defined(NO_RSA)
+    int pssSaltLen;   /* RSASSA-PSS params from SignerInfo; valid when */
+    int pssHashType;  /* pssParamsPresent == 1; else verify path uses  */
+    int pssMgf;       /* RSA_PSS_SALT_LEN_DEFAULT / digest algo defaults */
+    byte pssParamsPresent;
 #endif
 
     /* !! NEW DATA MEMBERS MUST BE ADDED AT END !! */

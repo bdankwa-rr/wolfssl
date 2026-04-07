@@ -1,6 +1,6 @@
 /* wolfkmod.c -- wolfssl FreeBSD kernel module.
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -872,6 +872,7 @@ static int wolfkdriv_gcm_work(device_t dev, wolfkdriv_session_t * session,
 
         if (error) {
             error = EINVAL;
+            goto gcm_work_out;
         }
     }
     else {

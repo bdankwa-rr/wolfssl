@@ -440,8 +440,18 @@ src_libwolfssl@LIBSUFFIX@_la_SOURCES += \
                wolfcrypt/src/hmac.c \
                wolfcrypt/src/random.c
 
+if BUILD_FIPS_V6
+if BUILD_MEMUSE
+if BUILD_KERNEL_MODE_DEFAULTS
+src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/wolfentropy.c
+endif
+endif
+endif
+
+if !BUILD_FIPS_V6
 if BUILD_MEMUSE
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/wolfentropy.c
+endif
 endif
 
 if BUILD_RNG_BANK
@@ -1416,6 +1426,10 @@ endif
 if BUILD_WC_XMSS
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/wc_xmss.c
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/wc_xmss_impl.c
+endif
+
+if BUILD_WC_SLHDSA
+src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/wc_slhdsa.c
 endif
 
 if !BUILD_FIPS_V6_PLUS

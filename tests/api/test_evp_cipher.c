@@ -1,6 +1,6 @@
 /* test_evp_cipher.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1915,6 +1915,7 @@ int test_wolfssl_EVP_chacha20_poly1305(void)
     byte cipherText[sizeof(plainText)];
     byte decryptedText[sizeof(plainText)];
     byte tag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
+    byte badTag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
     EVP_CIPHER_CTX* ctx = NULL;
     int outSz;
 
@@ -1976,6 +1977,28 @@ int test_wolfssl_EVP_chacha20_poly1305(void)
     ExpectIntEQ(EVP_DecryptFinal_ex(ctx, decryptedText, &outSz),
                 WOLFSSL_SUCCESS);
     ExpectIntEQ(outSz, 0);
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Negative test: forged (all-zero) tag must be rejected. */
+    XMEMSET(badTag, 0, sizeof(badTag));
+    ExpectNotNull((ctx = EVP_CIPHER_CTX_new()));
+    ExpectIntEQ(EVP_DecryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL,
+                NULL, NULL), WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                CHACHA20_POLY1305_AEAD_IV_SIZE, NULL), WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG,
+                CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE, badTag),
+                WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv),
+                WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_DecryptUpdate(ctx, NULL, &outSz, aad, sizeof(aad)),
+                WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_DecryptUpdate(ctx, decryptedText, &outSz, cipherText,
+                sizeof(cipherText)), WOLFSSL_SUCCESS);
+    /* EVP_DecryptFinal_ex MUST return failure on tag mismatch */
+    ExpectIntNE(EVP_DecryptFinal_ex(ctx, decryptedText, &outSz),
+                WOLFSSL_SUCCESS);
     EVP_CIPHER_CTX_free(ctx);
     ctx = NULL;
 
@@ -2701,4 +2724,143 @@ int test_wolfSSL_EVP_mdc2(void)
 #endif
     return EXPECT_RESULT();
 }
+
+/* Test for integer overflow in EVP AEAD AAD accumulation.
+ *
+ * wolfSSL_EVP_CipherUpdate_GCM_AAD (and the CCM/ARIA variants) compute
+ * allocation sizes as (ctx->authInSz + inl) where both operands are int.
+ * Repeated AAD calls can accumulate authInSz to a value where adding inl
+ * overflows the signed int sum. The overflowed value is then cast to size_t
+ * for XMALLOC/XREALLOC, producing either:
+ *   - A huge allocation on 64-bit (masking the bug as MEMORY_E), or
+ *   - A potential heap buffer overflow on 32-bit if the wrapped size is small
+ *     enough to succeed but the subsequent XMEMCPY uses the original large
+ *     authInSz offset.
+ *
+ * This test simulates the overflow condition by directly setting authInSz near
+ * INT_MAX after legitimate initialization, then calling EVP_EncryptUpdate with
+ * AAD that triggers the overflow. A properly-fixed implementation should detect
+ * the overflow and return WOLFSSL_FAILURE before attempting the allocation.
+ */
+int test_evp_cipher_pkcs7_pad_zero(void)
+{
+    EXPECT_DECLS;
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128) && \
+    defined(OPENSSL_EXTRA)
+    EVP_CIPHER_CTX *ctx = NULL;
+    /* AES-128-CBC key and IV */
+    byte key[AES_BLOCK_SIZE] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+    byte iv[AES_BLOCK_SIZE] = {0};
+    /* Two plaintext blocks, with the last byte set to 0x00. When decrypted
+     * with padding enabled, the last byte (0x00) will be interpreted as the
+     * PKCS#7 padding length, which is invalid (valid range is 1..block_size).
+     * Using two blocks ensures CipherUpdate outputs the first block and
+     * CipherFinal processes the second (last) block through checkPad. */
+    byte plain[AES_BLOCK_SIZE * 2] = {
+        0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+        0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+        0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+        0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x00
+    };
+    byte cipher[AES_BLOCK_SIZE * 3];
+    byte decrypted[AES_BLOCK_SIZE * 3];
+    int outl = 0;
+    int total = 0;
+
+    /* Encrypt two plaintext blocks with padding disabled so the ciphertext
+     * is exactly two blocks. */
+    ExpectNotNull(ctx = EVP_CIPHER_CTX_new());
+    ExpectIntEQ(EVP_CipherInit(ctx, EVP_aes_128_cbc(), key, iv, 1),
+        WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_CIPHER_CTX_set_padding(ctx, 0), WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_CipherUpdate(ctx, cipher, &outl, plain,
+        AES_BLOCK_SIZE * 2), WOLFSSL_SUCCESS);
+    total = outl;
+    ExpectIntEQ(EVP_CipherFinal(ctx, cipher + total, &outl), WOLFSSL_SUCCESS);
+    total += outl;
+    ExpectIntEQ(total, AES_BLOCK_SIZE * 2);
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Decrypt the ciphertext with padding enabled (the default).
+     * CipherUpdate should output the first block. CipherFinal processes
+     * the last block through checkPad, which should reject padding value 0. */
+    ExpectNotNull(ctx = EVP_CIPHER_CTX_new());
+    ExpectIntEQ(EVP_CipherInit(ctx, EVP_aes_128_cbc(), key, iv, 0),
+        WOLFSSL_SUCCESS);
+    ExpectIntEQ(EVP_CipherUpdate(ctx, decrypted, &outl, cipher, total),
+        WOLFSSL_SUCCESS);
+    ExpectIntEQ(outl, AES_BLOCK_SIZE);
+    ExpectIntNE(EVP_CipherFinal(ctx, decrypted + outl, &outl),
+        WOLFSSL_SUCCESS);
+    EVP_CIPHER_CTX_free(ctx);
+
+#endif /* !NO_AES && HAVE_AES_CBC && WOLFSSL_AES_128 && OPENSSL_EXTRA */
+    return EXPECT_RESULT();
+}
+
+int test_evp_cipher_aead_aad_overflow(void)
+{
+    EXPECT_DECLS;
+#if defined(OPENSSL_EXTRA) && !defined(NO_AES) && defined(HAVE_AESGCM) && \
+    defined(WOLFSSL_AES_256) && !defined(HAVE_SELFTEST) && !defined(HAVE_FIPS) && \
+    !defined(WOLFSSL_AESGCM_STREAM)
+
+    WOLFSSL_EVP_CIPHER_CTX *ctx = NULL;
+    byte key[32] = {0};
+    byte iv[12] = {0};
+    byte aad[32] = {0};
+    int outl = 0;
+    int savedAuthInSz;
+
+    /* Initialize AES-256-GCM encryption context */
+    ctx = EVP_CIPHER_CTX_new();
+    ExpectNotNull(ctx);
+    ExpectIntEQ(WOLFSSL_SUCCESS, EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(),
+        NULL, key, iv));
+
+    /* Feed a small legitimate AAD to allocate authIn */
+    ExpectIntEQ(WOLFSSL_SUCCESS, EVP_EncryptUpdate(ctx, NULL, &outl, aad, 16));
+
+    if (EXPECT_SUCCESS()) {
+        ExpectIntEQ(ctx->authInSz, 16);
+
+        /* Simulate accumulated AAD near INT_MAX.
+         * In a real attack scenario, an attacker controlling AAD input to a
+         * server could accumulate authInSz toward INT_MAX through many calls.
+         * We set it directly to avoid needing ~2GB of actual allocations.
+         */
+        savedAuthInSz = ctx->authInSz;
+        ctx->authInSz = INT_MAX - 16;
+
+        /* Attempt AAD update that causes overflow:
+         *   (INT_MAX - 16) + 32 = INT_MAX + 16
+         * This overflows signed int (undefined behavior in C). The result:
+         *   - As signed int: wraps to INT_MIN + 15 (on 2's complement)
+         *   - Cast to size_t on 64-bit: ~0xFFFFFFFF8000000F (huge)
+         *   - Cast to size_t on 32-bit: ~0x8000000F (~2GB)
+         *
+         * With no overflow check, the code proceeds to XREALLOC with the
+         * wrapped size. On 64-bit this fails (MEMORY_E), accidentally
+         * preventing corruption. On 32-bit, if the allocation succeeds,
+         * XMEMCPY writes at offset (INT_MAX - 16) into the buffer, causing
+         * heap corruption.
+         */
+        ExpectIntNE(WOLFSSL_SUCCESS,
+            EVP_EncryptUpdate(ctx, NULL, &outl, aad, 32));
+
+        /* Restore authInSz so cleanup doesn't operate on corrupted state */
+        if (ctx != NULL)
+            ctx->authInSz = savedAuthInSz;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+#endif /* OPENSSL_EXTRA && HAVE_AESGCM && WOLFSSL_AES_256 */
+    return EXPECT_RESULT();
+}
+
 
