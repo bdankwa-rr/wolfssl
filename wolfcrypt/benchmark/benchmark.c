@@ -778,11 +778,6 @@ static WC_INLINE void bench_append_memory_info(char* buffer, size_t size,
 
 #ifdef WOLFSSL_STATIC_MEMORY
     static WOLFSSL_HEAP_HINT* HEAP_HINT;
-    /*NOTE RR: This function is called from benchmark_main.c to set the HEAP_HINT*/
-    WOLFSSL_API void wc_benchmark_set_heap_hint(WOLFSSL_HEAP_HINT* hint)
-    {
-        HEAP_HINT = hint;
-    }
 #else
     #define HEAP_HINT NULL
 #endif /* WOLFSSL_STATIC_MEMORY */
@@ -1037,44 +1032,6 @@ static word32 bench_pq_asym_algs2 = 0;
 static word32 bench_other_algs = 0;
 /* Post-Quantum Stateful Hash-Based sig algorithms to benchmark. */
 static word32 bench_pq_hash_sig_algs = 0;
-
-/*NOTE RR Update*/
-/* Enable only what you want to benchmark */
-static void bench_apply_enablelist(void)
-{
-    /* 1) Disable "all" mode so it can't override */
-    bench_all = 0;
-
-    /* 2) Clear everything */
-    bench_cipher_algs = 0;
-    bench_digest_algs = 0;
-    bench_mac_algs = 0;
-    bench_kdf_algs = 0;
-    bench_asym_algs = 0;
-    bench_pq_asym_algs = 0;
-    bench_pq_asym_algs2 = 0;
-    bench_other_algs = 0;
-    bench_pq_hash_sig_algs = 0;
-
-    /* 3) Select primitives*/
-
-    bench_cipher_algs   |= BENCH_AES_CBC | BENCH_AES_GCM | BENCH_AES_GMAC | BENCH_AES_ECB 
-                        | BENCH_AES_XTS  | BENCH_AES_CFB | BENCH_AES_OFB  | BENCH_AES_CTR
-                        | BENCH_AES_CCM  | BENCH_AES_SIV | BENCH_CAMELLIA | BENCH_ARC4
-                        | BENCH_CHACHA20 | BENCH_DES     | BENCH_ASCON_AEAD128 |BENCH_CHACHA20_POLY1305;
-    bench_digest_algs   |= BENCH_MD5     | BENCH_POLY1305 | BENCH_SHA | BENCH_SHA2 |BENCH_SHA224
-                        | BENCH_SHA256   | BENCH_SHA384  | BENCH_SHA512 | BENCH_SHA3
-                        | BENCH_SHA3_224 | BENCH_SHA3_256  | BENCH_SHA3_384 | BENCH_SHA3_512
-                        | BENCH_SHAKE128 | BENCH_SHAKE256  | BENCH_RIPEMD   | BENCH_BLAKE2B
-                        | BENCH_BLAKE2S;
-    bench_mac_algs      |= BENCH_HMAC | BENCH_HMAC_MD5 | BENCH_HMAC_SHA256 | BENCH_HMAC_SHA384 
-                        | BENCH_HMAC_SHA512 | BENCH_CMAC;
-    bench_asym_algs     |= BENCH_RSA | BENCH_DH | BENCH_CURVE25519_KEYGEN | BENCH_CURVE25519_KA
-                        | BENCH_ED25519_KEYGEN | BENCH_ED25519_SIGN;
-    bench_pq_asym_algs  |= BENCH_KYBER | BENCH_KYBER512 | BENCH_KYBER768 | BENCH_KYBER1024
-                        | BENCH_DILITHIUM_LEVEL2_SIGN | BENCH_DILITHIUM_LEVEL3_SIGN | BENCH_DILITHIUM_LEVEL5_SIGN;
-    bench_pq_hash_sig_algs  |= BENCH_LMS_HSS ;
-}
 
 #if !defined(WOLFSSL_BENCHMARK_ALL) && !defined(NO_MAIN_DRIVER)
 
@@ -2793,6 +2750,7 @@ static WC_INLINE int bench_stats_check(double start)
             * 1000000
 #endif
            );
+
     return ret;
 }
 
@@ -3877,13 +3835,10 @@ static void* benchmarks_do(void* args)
     bench_iv = (byte*)bench_iv_buf;
 #endif
 
-/*NOTE RR update*/
-    bench_apply_enablelist();
 #ifndef WC_NO_RNG
     if (bench_all || (bench_other_algs & BENCH_RNG))
         bench_rng();
 #endif /* WC_NO_RNG */
-
 #ifndef NO_AES
 #ifdef HAVE_AES_CBC
     if (bench_all || (bench_cipher_algs & BENCH_AES_CBC)) {
@@ -6013,7 +5968,7 @@ static void bench_aesofb_internal(const byte* key,
 
     bench_stats_prepare();
 
-    ret = wc_AesInit(&enc, NULL, INVALID_DEVID);
+    ret = wc_AesInit(&enc, HEAP_HINT, devId);
     if (ret != 0) {
         printf("AesInit failed at L%d, ret = %d\n", __LINE__, ret);
         return;
@@ -7537,7 +7492,7 @@ void bench_sha256(int useDeviceID)
     #ifdef MULTI_VALUE_STATISTICS
            || runs < minimum_runs
     #endif
-           ); 
+           );
     }
     else {
         bench_stats_start(&count, &start);
@@ -11080,7 +11035,7 @@ static void bench_lms_keygen(enum wc_LmsParm parm, byte* pub)
         return;
     }
 
-    ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
+    ret = wc_LmsKey_Init(&key, HEAP_HINT, devId);
     if (ret) {
         printf("wc_LmsKey_Init failed: %d\n", ret);
         wc_FreeRng(&rng);
@@ -14274,9 +14229,9 @@ void bench_falconKeySign(byte level)
 
     bench_stats_prepare();
 
-    ret = wc_falcon_init(&key);
+    ret = wc_falcon_init_ex(&key, HEAP_HINT, devId);
     if (ret != 0) {
-        printf("wc_falcon_init failed %d\n", ret);
+        printf("wc_falcon_init_ex failed %d\n", ret);
         return;
     }
 
@@ -15523,10 +15478,9 @@ void bench_dilithiumKeySign(byte level)
         msg[i] = (byte)i;
     }
 #endif
-/*NOTE: RR Manually added Jabob's pull request*/
+
     ret = wc_dilithium_init_ex(key, HEAP_HINT, devId);
     if (ret != 0) {
-        printf("wc_dilithium_init_ex failed %d\n", ret);
         printf("wc_dilithium_init_ex failed %d\n", ret);
         goto out;
     }
@@ -15542,7 +15496,7 @@ void bench_dilithiumKeySign(byte level)
         for (i = 0; i < agreeTimes; i++) {
             ret = wc_dilithium_make_key(key, GLOBAL_RNG);
             if (ret != 0) {
-                printf("wc_dilithium_import_private_key failed %d\n", ret);                
+                printf("wc_dilithium_import_private_key failed %d\n", ret);
                 goto out;
             }
         }
@@ -15941,7 +15895,7 @@ void bench_sphincsKeySign(byte level, byte optim)
 #elif defined(WOLFSSL_IAR_ARM_TIME) || defined (WOLFSSL_MDK_ARM) || \
       defined(WOLFSSL_USER_CURRTIME) || defined(WOLFSSL_CURRTIME_REMAP)
     /* declared above at line 239 */
-    extern   double current_time(int reset);
+    /* extern   double current_time(int reset); */
 
 #elif defined(FREERTOS)
 
