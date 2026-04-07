@@ -400,6 +400,14 @@ extern "C" {
 //#undef  USE_CERT_BUFFERS_256
 //#define USE_CERT_BUFFERS_256
 
+//#undef GENERATE_MACHINE_PARSEABLE_REPORT
+//#if 1
+//    #define GENERATE_MACHINE_PARSEABLE_REPORT
+//    #define WOLFSSL_BENCHMARK_FIXED_CSV
+//    #define HAVE_GET_CYCLES
+//    #define WOLFSSL_BENCHMARK_TIMER_DEBUGS
+//#endif
+
 
 /* ------------------------------------------------------------------------- */
 /* Debugging */
