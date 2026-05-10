@@ -408,6 +408,8 @@ extern "C" {
 //    #define WOLFSSL_BENCHMARK_TIMER_DEBUGS
 //#endif
 
+#define MULTI_VALUE_STATISTICS
+
 
 /* ------------------------------------------------------------------------- */
 /* Debugging */

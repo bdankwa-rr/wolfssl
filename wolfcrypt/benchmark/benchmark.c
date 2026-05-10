@@ -11051,7 +11051,7 @@ static void bench_lms_keygen(enum wc_LmsParm parm, byte* pub)
 
             wc_LmsKey_Free(&key);
 
-            ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
+            ret = wc_LmsKey_Init(&key, HEAP_HINT, devId);
             if (ret) {
                 printf("wc_LmsKey_Init failed: %d\n", ret);
                 goto exit_lms_keygen;
@@ -11140,7 +11140,7 @@ static void bench_lms_sign_verify(enum wc_LmsParm parm, byte* pub)
 
     bench_stats_prepare();
 
-    ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
+    ret = wc_LmsKey_Init(&key, HEAP_HINT, devId);
     if (ret) {
         printf("wc_LmsKey_Init failed: %d\n", ret);
         goto exit_lms_sign_verify;
@@ -11571,7 +11571,7 @@ static void bench_xmss_sign_verify(const char * params)
 
     freeRng = 1;
 
-    ret = wc_XmssKey_Init(&key, NULL, INVALID_DEVID);
+    ret = wc_XmssKey_Init(&key, HEAP_HINT, devId);
     if (ret != 0) {
         printf("wc_XmssKey_Init failed: %d\n", ret);
         goto exit_xmss_sign_verify;
