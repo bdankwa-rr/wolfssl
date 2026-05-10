@@ -193,8 +193,10 @@ int wolfCrypt_ATECC_SetConfig(ATCAIfaceCfg* cfg)
         return -1;
     }
 
-    /* copy configuration into our local struct */
-    XMEMSET(&cfg_ateccx08a_i2c_pi, 0, sizeof(cfg_ateccx08a_i2c_pi));
+    /* Copy whole struct so non-I2C interface unions (e.g. atcacustom function
+     * pointers when iface_type == ATCA_CUSTOM_IFACE) survive. The field-by-
+     * field assignments below then refresh the I2C-specific fields. */
+    XMEMCPY(&cfg_ateccx08a_i2c_pi, cfg, sizeof(cfg_ateccx08a_i2c_pi));
     cfg_ateccx08a_i2c_pi.iface_type            = cfg->iface_type;
     cfg_ateccx08a_i2c_pi.devtype               = cfg->devtype;
 #ifdef ATCA_ENABLE_DEPRECATED
@@ -232,7 +234,7 @@ int atmel_ecc_translate_err(int status)
 }
 
 /* Function to set the slotId allocator and deallocator */
-int atmel_set_slot_allocator(atmel_slot_alloc_cb alloc,
+WOLFSSL_API int atmel_set_slot_allocator(atmel_slot_alloc_cb alloc,
                              atmel_slot_dealloc_cb dealloc)
 {
 #ifndef SINGLE_THREADED
@@ -467,6 +469,16 @@ int atmel_ecc_create_key(int slotId, byte* peerKey)
 int atmel_ecc_sign(int slotId, const byte* message, byte* signature)
 {
     int ret;
+#ifndef WC_ALLOW_ECC_ZERO_HASH
+    byte hashIsZero = 0;
+    word32 zIdx;
+
+    /* defensive sanity check on all 0's hash */
+    for (zIdx = 0; zIdx < ATECC_KEY_SIZE; zIdx++)
+        hashIsZero |= message[zIdx];
+    if (hashIsZero == 0)
+        return ECC_BAD_ARG_E;
+#endif
 
     ret = atcab_sign(slotId, message, signature);
     ret = atmel_ecc_translate_err(ret);

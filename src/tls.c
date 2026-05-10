@@ -76,7 +76,6 @@
  *
  * Post-Quantum:
  * WOLFSSL_HAVE_MLKEM:       Enable ML-KEM (Kyber) support         default: off
- * WOLFSSL_WC_MLKEM:         Use wolfCrypt ML-KEM implementation   default: off
  * WOLFSSL_MLKEM_KYBER:      Use Kyber round 3 parameters          default: off
  * WOLFSSL_KYBER512:         Enable Kyber/ML-KEM-512               default: off
  * WOLFSSL_KYBER768:         Enable Kyber/ML-KEM-768               default: off
@@ -140,12 +139,7 @@
     #include <wolfssl/wolfcrypt/curve448.h>
 #endif
 #ifdef WOLFSSL_HAVE_MLKEM
-    #include <wolfssl/wolfcrypt/mlkem.h>
-#ifdef WOLFSSL_WC_MLKEM
     #include <wolfssl/wolfcrypt/wc_mlkem.h>
-#elif defined(HAVE_LIBOQS)
-    #include <wolfssl/wolfcrypt/ext_mlkem.h>
-#endif
 #endif
 
 #if defined(WOLFSSL_RENESAS_TSIP_TLS)
@@ -187,7 +181,7 @@ static int TLSX_PopulateSupportedGroups(WOLFSSL* ssl, TLSX** extensions);
         #error The build option WC_RSA_PSS is required for TLS 1.3 with RSA
     #endif
     #ifndef HAVE_TLS_EXTENSIONS
-        #ifndef _MSC_VER
+        #if !defined(_MSC_VER) && !defined(__TASKING__)
             #error "The build option HAVE_TLS_EXTENSIONS is required for TLS 1.3"
         #else
             #pragma message("Error: The build option HAVE_TLS_EXTENSIONS is required for TLS 1.3")
@@ -198,7 +192,7 @@ static int TLSX_PopulateSupportedGroups(WOLFSSL* ssl, TLSX** extensions);
 /* Warn if secrets logging is enabled */
 #if (defined(SHOW_SECRETS) || defined(WOLFSSL_SSLKEYLOGFILE)) && \
     !defined(WOLFSSL_KEYLOG_EXPORT_WARNED)
-    #ifndef _MSC_VER
+    #if !defined(_MSC_VER) && !defined(__TASKING__)
         #warning The SHOW_SECRETS and WOLFSSL_SSLKEYLOGFILE options should only be used for debugging and never in a production environment
     #else
         #pragma message("Warning: The SHOW_SECRETS and WOLFSSL_SSLKEYLOGFILE options should only be used for debugging and never in a production environment")
@@ -987,29 +981,33 @@ static int Hmac_HashFinalRaw(Hmac* hmac, unsigned char* hash)
 static int Hmac_OuterHash(Hmac* hmac, unsigned char* mac)
 {
     int ret = WC_NO_ERR_TRACE(BAD_FUNC_ARG);
-    wc_HashAlg hash;
+    WC_DECLARE_VAR(hash, wc_HashAlg, 1, hmac ? hmac->heap : NULL);
     enum wc_HashType hashType = (enum wc_HashType)hmac->macType;
     int digestSz = wc_HashGetDigestSize(hashType);
     int blockSz = wc_HashGetBlockSize(hashType);
 
+    WC_ALLOC_VAR_EX(hash, wc_HashAlg, 1, hmac->heap, DYNAMIC_TYPE_HASHES,
+                    return MEMORY_E);
+
     if ((digestSz >= 0) && (blockSz >= 0)) {
-        ret = wc_HashInit(&hash, hashType);
+        ret = wc_HashInit(hash, hashType);
     }
     else {
         ret = BAD_FUNC_ARG;
     }
 
     if (ret == 0) {
-        ret = wc_HashUpdate(&hash, hashType, (byte*)hmac->opad,
+        ret = wc_HashUpdate(hash, hashType, (byte*)hmac->opad,
             (word32)blockSz);
         if (ret == 0)
-            ret = wc_HashUpdate(&hash, hashType, (byte*)hmac->innerHash,
+            ret = wc_HashUpdate(hash, hashType, (byte*)hmac->innerHash,
                 (word32)digestSz);
         if (ret == 0)
-            ret = wc_HashFinal(&hash, hashType, mac);
-        wc_HashFree(&hash, hashType);
+            ret = wc_HashFinal(hash, hashType, mac);
+        wc_HashFree(hash, hashType);
     }
 
+    WC_FREE_VAR_EX(hash, hmac->heap, DYNAMIC_TYPE_HASHES);
     return ret;
 }
 
@@ -1188,7 +1186,7 @@ static int Hmac_UpdateFinal_CT(Hmac* hmac, byte* digest, const byte* in,
 #endif
 
 #if defined(WOLFSSL_NO_HASH_RAW) || defined(HAVE_FIPS) || \
-    defined(HAVE_SELFTEST) || defined(HAVE_BLAKE2)
+    defined(HAVE_SELFTEST) || defined(HAVE_BLAKE2B)
 
 /* Calculate the HMAC of the header + message data.
  * Constant time implementation using normal hashing operations.
@@ -1249,14 +1247,14 @@ static int Hmac_UpdateFinal(Hmac* hmac, byte* digest, const byte* in,
             break;
     #endif /* WOLFSSL_SHA512 */
 
-    #ifdef HAVE_BLAKE2
+    #ifdef HAVE_BLAKE2B
         case WC_HASH_TYPE_BLAKE2B:
             blockSz = BLAKE2B_BLOCKBYTES;
             blockBits = 7;
             macSz = BLAKE2B_256;
             padSz = 0;
             break;
-    #endif /* HAVE_BLAKE2 */
+    #endif /* HAVE_BLAKE2B */
 
     #ifdef WOLFSSL_SM3
         case WC_SM3:
@@ -1382,7 +1380,7 @@ static int TLS_hmac_SetInner(WOLFSSL* ssl, byte* inner, word32* innerSz,
 int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
              int content, int verify, int epochOrder)
 {
-    Hmac   hmac;
+    WC_DECLARE_VAR(hmac, Hmac, 1, ssl ? ssl->heap : NULL);
     byte   myInner[TLS_HMAC_INNER_SZ];
     word32 innerSz = TLS_HMAC_INNER_SZ;
     int    ret = 0;
@@ -1392,6 +1390,9 @@ int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
 
     if (ssl == NULL)
         return BAD_FUNC_ARG;
+
+    WC_ALLOC_VAR_EX(hmac, Hmac, 1, ssl->heap, DYNAMIC_TYPE_HMAC,
+                    return MEMORY_E);
 
 #ifdef HAVE_TRUNCATED_HMAC
     hashSz = ssl->truncated_hmac ? (byte)TRUNCATED_HMAC_SZ
@@ -1407,6 +1408,7 @@ int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
         if (!WC_SAFE_SUM_WORD32(sz, hashSz, hmacSz) ||
             !WC_SAFE_SUM_WORD32(hmacSz, (word32)padSz, hmacSz) ||
             !WC_SAFE_SUM_WORD32(hmacSz, 1, hmacSz)) {
+            WC_FREE_VAR_EX(hmac, ssl->heap, DYNAMIC_TYPE_HMAC);
             return BUFFER_E;
         }
         totalSz = hmacSz;
@@ -1427,12 +1429,16 @@ int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
 
     ret = TLS_hmac_SetInner(ssl, myInner, &innerSz, sz, content, verify,
                             epochOrder);
-    if (ret != 0)
+    if (ret != 0) {
+        WC_FREE_VAR_EX(hmac, ssl->heap, DYNAMIC_TYPE_HMAC);
         return ret;
+    }
 
-    ret = wc_HmacInit(&hmac, ssl->heap, ssl->devId);
-    if (ret != 0)
+    ret = wc_HmacInit(hmac, ssl->heap, ssl->devId);
+    if (ret != 0) {
+        WC_FREE_VAR_EX(hmac, ssl->heap, DYNAMIC_TYPE_HMAC);
         return ret;
+    }
 
 
 #ifdef WOLFSSL_DTLS
@@ -1441,7 +1447,7 @@ int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
     else
 #endif
         macSecret = wolfSSL_GetMacSecret(ssl, verify);
-    ret = wc_HmacSetKey(&hmac, wolfSSL_GetHmacType(ssl),
+    ret = wc_HmacSetKey(hmac, wolfSSL_GetHmacType(ssl),
                                               macSecret,
                                               ssl->specs.hash_size);
 
@@ -1450,34 +1456,35 @@ int TLS_hmac(WOLFSSL* ssl, byte* digest, const byte* in, word32 sz, int padSz,
         if (verify && padSz >= 0) {
 #if !defined(WOLFSSL_NO_HASH_RAW) && !defined(HAVE_FIPS) && \
     !defined(HAVE_SELFTEST)
-    #ifdef HAVE_BLAKE2
+    #ifdef HAVE_BLAKE2B
             if (wolfSSL_GetHmacType(ssl) == WC_HASH_TYPE_BLAKE2B) {
-                ret = Hmac_UpdateFinal(&hmac, digest, in,
+                ret = Hmac_UpdateFinal(hmac, digest, in,
                         totalSz, myInner, innerSz);
             }
             else
     #endif
             {
-                ret = Hmac_UpdateFinal_CT(&hmac, digest, in,
+                ret = Hmac_UpdateFinal_CT(hmac, digest, in,
                                       totalSz,
                                       (int)hashSz, myInner, innerSz);
 
             }
 #else
-            ret = Hmac_UpdateFinal(&hmac, digest, in, totalSz,
+            ret = Hmac_UpdateFinal(hmac, digest, in, totalSz,
                                         myInner, innerSz);
 #endif
         }
         else {
-            ret = wc_HmacUpdate(&hmac, myInner, innerSz);
+            ret = wc_HmacUpdate(hmac, myInner, innerSz);
             if (ret == 0)
-                ret = wc_HmacUpdate(&hmac, in, sz);                /* content */
+                ret = wc_HmacUpdate(hmac, in, sz);                /* content */
             if (ret == 0)
-                ret = wc_HmacFinal(&hmac, digest);
+                ret = wc_HmacFinal(hmac, digest);
         }
     }
 
-    wc_HmacFree(&hmac);
+    wc_HmacFree(hmac);
+    WC_FREE_VAR_EX(hmac, ssl->heap, DYNAMIC_TYPE_HMAC);
 
     return ret;
 }
@@ -1521,7 +1528,7 @@ int wolfSSL_GetHmacType_ex(CipherSpecs* specs)
             return WC_SHA;
         }
         #endif
-        #ifdef HAVE_BLAKE2
+        #ifdef HAVE_BLAKE2B
         case blake2b_mac:
         {
             return BLAKE2B_ID;
@@ -1809,16 +1816,20 @@ static void TLSX_ALPN_FreeAll(ALPN *list, void* heap)
 static word16 TLSX_ALPN_GetSize(ALPN *list)
 {
     ALPN* alpn;
-    word16 length = OPAQUE16_LEN; /* list length */
+    word32 length = OPAQUE16_LEN; /* list length */
 
     while ((alpn = list)) {
         list = alpn->next;
 
         length++; /* protocol name length is on one byte */
-        length += (word16)XSTRLEN(alpn->protocol_name);
+        length += (word32)XSTRLEN(alpn->protocol_name);
+
+        if (length > WOLFSSL_MAX_16BIT) {
+            return 0;
+        }
     }
 
-    return length;
+    return (word16)length;
 }
 
 /** Writes the ALPN objects of a list in a buffer. */
@@ -2613,6 +2624,9 @@ int TLSX_UseSNI(TLSX** extensions, byte type, const void* data, word16 size,
     if (extensions == NULL || data == NULL)
         return BAD_FUNC_ARG;
 
+    if ((type == WOLFSSL_SNI_HOST_NAME) && (size >= WOLFSSL_HOST_NAME_MAX))
+        return BAD_LENGTH_E;
+
     if ((sni = TLSX_SNI_New(type, data, size, heap)) == NULL)
         return MEMORY_E;
 
@@ -2800,6 +2814,9 @@ int TLSX_SNI_GetFromBuffer(const byte* clientHello, word32 helloSz,
         } else {
             word16 listLen;
 
+            if (extLen < OPAQUE16_LEN)
+                return BUFFER_ERROR;
+
             ato16(clientHello + offset, &listLen);
             offset += OPAQUE16_LEN;
 
@@ -2938,7 +2955,7 @@ static void TLSX_TCA_FreeAll(TCA* list, void* heap)
 static word16 TLSX_TCA_GetSize(TCA* list)
 {
     TCA* tca;
-    word16 length = OPAQUE16_LEN; /* list length */
+    word32 length = OPAQUE16_LEN; /* list length */
 
     while ((tca = list)) {
         list = tca->next;
@@ -2956,9 +2973,13 @@ static word16 TLSX_TCA_GetSize(TCA* list)
                 length += OPAQUE16_LEN + tca->idSz;
                 break;
         }
+
+        if (length > WOLFSSL_MAX_16BIT) {
+            return 0;
+        }
     }
 
-    return length;
+    return (word16)length;
 }
 
 /** Writes the TCA objects of a list in a buffer. */
@@ -3611,6 +3632,14 @@ int ProcessChainOCSPRequest(WOLFSSL* ssl)
 
     if (chain && chain->buffer) {
         while (ret == 0 && pos + OPAQUE24_LEN < chain->length) {
+            if (i >= MAX_CERT_EXTENSIONS) {
+                WOLFSSL_MSG_EX(
+                    "OCSP request cert chain exceeds maximum length: "
+                    "i=%d, MAX_CERT_EXTENSIONS=%d", i, MAX_CERT_EXTENSIONS);
+                ret = MAX_CERT_EXTENSIONS_ERR;
+                break;
+            }
+
             c24to32(chain->buffer + pos, &der.length);
             pos += OPAQUE24_LEN;
             der.buffer = chain->buffer + pos;
@@ -4551,12 +4580,6 @@ int TLSX_UseCertificateStatusRequestV2(TLSX** extensions, byte status_type,
 #if defined(HAVE_SUPPORTED_CURVES) || \
     (defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES))
 
-/* Functions needed by TLSX_IsGroupSupported */
-#ifdef HAVE_LIBOQS
-static int mlkem_id2type(int id, int *type);
-static void findEccPqc(int *ecc, int *pqc, int *pqc_first, int group);
-#endif
-
 /* Returns whether this group is supported.
  *
  * namedGroup  The named group to check.
@@ -4672,7 +4695,6 @@ int TLSX_IsGroupSupported(int namedGroup)
     #endif
 #ifdef WOLFSSL_HAVE_MLKEM
 #ifndef WOLFSSL_NO_ML_KEM
-    #ifdef WOLFSSL_WC_MLKEM
         #ifndef WOLFSSL_NO_ML_KEM_512
             #ifndef WOLFSSL_TLS_NO_MLKEM_STANDALONE
             case WOLFSSL_ML_KEM_512:
@@ -4723,50 +4745,8 @@ int TLSX_IsGroupSupported(int namedGroup)
             case WOLFSSL_P521_ML_KEM_1024_OLD:
                 break;
         #endif /* WOLFSSL_ML_KEM_USE_OLD_IDS && WOLFSSL_EXTRA_PQC_HYBRIDS */
-    #elif defined(HAVE_LIBOQS)
-        case WOLFSSL_ML_KEM_512:
-        case WOLFSSL_ML_KEM_768:
-        case WOLFSSL_ML_KEM_1024:
-        {
-            int ret;
-            int id;
-            ret = mlkem_id2type(namedGroup, &id);
-            if (ret == WC_NO_ERR_TRACE(NOT_COMPILED_IN)) {
-                return 0;
-            }
-
-            if (! ext_mlkem_enabled(id)) {
-                return 0;
-            }
-            break;
-        }
-
-        case WOLFSSL_SECP256R1MLKEM512:
-        case WOLFSSL_SECP384R1MLKEM768:
-        case WOLFSSL_SECP256R1MLKEM768:
-        case WOLFSSL_SECP521R1MLKEM1024:
-        case WOLFSSL_SECP384R1MLKEM1024:
-        case WOLFSSL_X25519MLKEM512:
-        case WOLFSSL_X448MLKEM768:
-        case WOLFSSL_X25519MLKEM768:
-        {
-            int ret;
-            int id;
-            findEccPqc(NULL, &namedGroup, NULL, namedGroup);
-            ret = mlkem_id2type(namedGroup, &id);
-            if (ret == WC_NO_ERR_TRACE(NOT_COMPILED_IN)) {
-                return 0;
-            }
-
-            if (! ext_mlkem_enabled(id)) {
-                return 0;
-            }
-            break;
-        }
-    #endif
 #endif /* WOLFSSL_NO_ML_KEM */
 #ifdef WOLFSSL_MLKEM_KYBER
-    #ifdef WOLFSSL_WC_MLKEM
         #ifdef WOLFSSL_KYBER512
             case WOLFSSL_KYBER_LEVEL1:
             case WOLFSSL_P256_KYBER_LEVEL1:
@@ -4790,45 +4770,6 @@ int TLSX_IsGroupSupported(int namedGroup)
             case WOLFSSL_P521_KYBER_LEVEL5:
         #endif
                 break;
-    #elif defined(HAVE_LIBOQS)
-        case WOLFSSL_KYBER_LEVEL1:
-        case WOLFSSL_KYBER_LEVEL3:
-        case WOLFSSL_KYBER_LEVEL5:
-        {
-            int ret;
-            int id;
-            ret = mlkem_id2type(namedGroup, &id);
-            if (ret == WC_NO_ERR_TRACE(NOT_COMPILED_IN)) {
-                return 0;
-            }
-
-            if (! ext_mlkem_enabled(id)) {
-                return 0;
-            }
-            break;
-        }
-        case WOLFSSL_P256_KYBER_LEVEL1:
-        case WOLFSSL_P384_KYBER_LEVEL3:
-        case WOLFSSL_P256_KYBER_LEVEL3:
-        case WOLFSSL_P521_KYBER_LEVEL5:
-        case WOLFSSL_X25519_KYBER_LEVEL1:
-        case WOLFSSL_X448_KYBER_LEVEL3:
-        case WOLFSSL_X25519_KYBER_LEVEL3:
-        {
-            int ret;
-            int id;
-            findEccPqc(NULL, &namedGroup, NULL, namedGroup);
-            ret = mlkem_id2type(namedGroup, &id);
-            if (ret == WC_NO_ERR_TRACE(NOT_COMPILED_IN)) {
-                return 0;
-            }
-
-            if (! ext_mlkem_enabled(id)) {
-                return 0;
-            }
-            break;
-        }
-    #endif
 #endif
 #endif /* WOLFSSL_HAVE_MLKEM */
         default:
@@ -6477,7 +6418,7 @@ static int TLSX_SessionTicket_Parse(WOLFSSL* ssl, const byte* input,
     return ret;
 }
 
-WOLFSSL_LOCAL SessionTicket* TLSX_SessionTicket_Create(word32 lifetime,
+WOLFSSL_TEST_VIS SessionTicket* TLSX_SessionTicket_Create(word32 lifetime,
                                             byte* data, word16 size, void* heap)
 {
     SessionTicket* ticket = (SessionTicket*)XMALLOC(sizeof(SessionTicket),
@@ -6498,7 +6439,7 @@ WOLFSSL_LOCAL SessionTicket* TLSX_SessionTicket_Create(word32 lifetime,
 
     return ticket;
 }
-WOLFSSL_LOCAL void TLSX_SessionTicket_Free(SessionTicket* ticket, void* heap)
+WOLFSSL_TEST_VIS void TLSX_SessionTicket_Free(SessionTicket* ticket, void* heap)
 {
     if (ticket) {
         XFREE(ticket->data, heap, DYNAMIC_TYPE_TLSX);
@@ -7547,7 +7488,7 @@ int TLSX_Cookie_Use(const WOLFSSL* ssl, const byte* data, word16 len, byte* mac,
 
 #else
 
-#define CKE_FREE_ALL(a, b)    0
+#define CKE_FREE_ALL(a, b)    WC_DO_NOTHING
 #define CKE_GET_SIZE(a, b, c) 0
 #define CKE_WRITE(a, b, c, d) 0
 #define CKE_PARSE(a, b, c, d) 0
@@ -7565,7 +7506,7 @@ static word16 TLSX_CA_Names_GetSize(void* data)
 {
     WOLFSSL* ssl = (WOLFSSL*)data;
     WOLF_STACK_OF(WOLFSSL_X509_NAME)* names;
-    word16 size = 0;
+    word32 size = 0;
 
     /* Length of names */
     size += OPAQUE16_LEN;
@@ -7575,11 +7516,14 @@ static word16 TLSX_CA_Names_GetSize(void* data)
 
         if (name != NULL) {
             /* 16-bit length | SEQ | Len | DER of name */
-            size += (word16)(OPAQUE16_LEN + SetSequence(name->rawLen, seq) +
+            size += (word32)(OPAQUE16_LEN + SetSequence(name->rawLen, seq) +
                              name->rawLen);
+            if (size > WOLFSSL_MAX_16BIT) {
+                return 0;
+            }
         }
     }
-    return size;
+    return (word16)size;
 }
 
 static word16 TLSX_CA_Names_Write(void* data, byte* output)
@@ -8603,7 +8547,8 @@ static int TLSX_KeyShare_GenEccKey(WOLFSSL *ssl, KeyShareEntry* kse)
 }
 
 #ifdef WOLFSSL_HAVE_MLKEM
-#if defined(WOLFSSL_MLKEM_CACHE_A) && \
+#if (defined(WOLFSSL_MLKEM_CACHE_A) || \
+    (defined(HAVE_PKCS11) && !defined(NO_PKCS11_MLKEM))) && \
     !defined(WOLFSSL_TLSX_PQC_MLKEM_STORE_PRIV_KEY)
     /* Store KyberKey object rather than private key bytes in key share entry.
      * Improves performance at cost of more dynamic memory being used. */
@@ -8863,7 +8808,9 @@ static int TLSX_KeyShare_GenPqcKeyClient(WOLFSSL *ssl, KeyShareEntry* kse)
 
 #ifndef WOLFSSL_TLSX_PQC_MLKEM_STORE_OBJ
     if (ret == 0) {
+        PRIVATE_KEY_UNLOCK();
         ret = wc_KyberKey_EncodePrivateKey(kem, privKey, privSz);
+        PRIVATE_KEY_LOCK();
     }
 #endif
 
@@ -9116,6 +9063,9 @@ static void TLSX_KeyShare_FreeAll(KeyShareEntry* list, void* heap)
         if (WOLFSSL_NAMED_GROUP_IS_FFDHE(current->group)) {
 #ifndef NO_DH
             wc_FreeDhKey((DhKey*)current->key);
+            if (current->privKey != NULL && current->privKeyLen > 0) {
+                ForceZero(current->privKey, current->privKeyLen);
+            }
 #endif
         }
         else if (current->group == WOLFSSL_ECC_X25519) {
@@ -9135,16 +9085,18 @@ static void TLSX_KeyShare_FreeAll(KeyShareEntry* list, void* heap)
             wc_curve448_free((curve448_key*)current->key);
 #endif
         }
-#ifdef WOLFSSL_HAVE_MLKEM
         else if (WOLFSSL_NAMED_GROUP_IS_PQC(current->group)) {
+#ifdef WOLFSSL_HAVE_MLKEM
             wc_KyberKey_Free((KyberKey*)current->key);
         #ifndef WOLFSSL_TLSX_PQC_MLKEM_STORE_OBJ
             if (current->privKey != NULL) {
                 ForceZero(current->privKey, current->privKeyLen);
             }
         #endif
+#endif
         }
         else if (WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(current->group)) {
+#ifdef WOLFSSL_HAVE_MLKEM
             int ecc_group = 0;
             findEccPqc(&ecc_group, NULL, NULL, current->group);
 
@@ -9182,8 +9134,8 @@ static void TLSX_KeyShare_FreeAll(KeyShareEntry* list, void* heap)
                 wc_ecc_free((ecc_key*)current->key);
             #endif
             }
-        }
 #endif
+        }
         else {
 #ifdef HAVE_ECC
         #if defined(WC_ECC_NONBLOCK) && defined(WOLFSSL_ASYNC_CRYPT_SW) && \
@@ -9341,6 +9293,14 @@ static int TLSX_KeyShare_ProcessDh(WOLFSSL* ssl, KeyShareEntry* keyShareEntry)
         return PEER_KEY_ERROR;
     }
 #endif
+
+    /* RFC 8446 Section 4.2.8.1: FFDHE key_exchange values are left-padded with
+     * zeros to the size of the named-group prime. Reject any peer key share
+     * whose byte length does not match the expected prime size. */
+    if (keyShareEntry->keLen != pSz) {
+        WOLFSSL_ERROR_VERBOSE(PEER_KEY_ERROR);
+        return PEER_KEY_ERROR;
+    }
 
     /* if DhKey is not setup, do it now */
     if (keyShareEntry->key == NULL) {
@@ -9946,13 +9906,21 @@ static int TLSX_KeyShare_ProcessPqcClient_ex(WOLFSSL* ssl,
         ret = BAD_FUNC_ARG;
     }
     if (ret == 0) {
+        PRIVATE_KEY_UNLOCK();
         ret = wc_KyberKey_DecodePrivateKey(kem, keyShareEntry->privKey, privSz);
+        PRIVATE_KEY_LOCK();
     }
 #endif
 
+    if (ret == 0 && keyShareEntry->keLen < ctSz) {
+        WOLFSSL_MSG("PQC key share data too short for ciphertext.");
+        ret = BUFFER_E;
+    }
     if (ret == 0) {
+        PRIVATE_KEY_UNLOCK();
         ret = wc_KyberKey_Decapsulate(kem, ssOutput,
                                       keyShareEntry->ke, ctSz);
+        PRIVATE_KEY_LOCK();
         if (ret != 0) {
             WOLFSSL_MSG("wc_KyberKey decapsulation failure.");
             ret = BAD_FUNC_ARG;
@@ -10183,15 +10151,24 @@ static int TLSX_KeyShare_ProcessPqcHybridClient(WOLFSSL* ssl,
             ecc_kse->key = NULL;
             pqc_kse->privKey = NULL;
         }
+        else
     #endif
+        {
+            /* Re-sync keyShareEntry->key with ecc_kse->key. ecc_kse->key was
+             * aliased to keyShareEntry->key above. The inner Process*_ex
+             * either ran its end-of-function cleanup and set ecc_kse->key
+             * to NULL (so the outer pointer must also become NULL to avoid
+             * UAF/double-free in TLSX_KeyShare_FreeAll), or returned early
+             * before cleanup with ecc_kse->key still pointing at the live
+             * key (so the outer pointer must keep that pointer for later
+             * freeing). Mirroring whatever the inner left in ecc_kse->key
+             * handles both cases correctly. */
+            keyShareEntry->key = ecc_kse->key;
+        }
     }
 
     if (ret == 0) {
-        keyShareEntry->key = ecc_kse->key;
-        ecc_kse->key = NULL;
-
-        if ((ret == 0) &&
-            ((ssl->arrays->preMasterSz + ssSzPqc) > ENCRYPT_LEN)) {
+        if ((ssl->arrays->preMasterSz + ssSzPqc) > ENCRYPT_LEN) {
             WOLFSSL_MSG("shared secret is too long.");
             ret = LENGTH_ERROR;
         }
@@ -10340,42 +10317,16 @@ static int TLSX_KeyShareEntry_Parse(const WOLFSSL* ssl, const byte* input,
         *seenGroupsCnt = i + 1;
     }
 
-#if defined(WOLFSSL_HAVE_MLKEM)
-    if ((WOLFSSL_NAMED_GROUP_IS_PQC(group)
-    #if !defined(WOLFSSL_ASYNC_CRYPT)
-         || WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(group)
-    #endif
-        ) && ssl->options.side == WOLFSSL_SERVER_END) {
-        /* When handling a key share containing a KEM public key on the server
-         * end, we have to perform the encapsulation immediately in order to
-         * send the resulting ciphertext back to the client in the ServerHello
-         * message. As the public key is not stored and we do not modify it, we
-         * don't have to create a copy of it.
-         * In case of a hybrid key exchange, the ECDH part is also performed
-         * immediately (to not split the generation of the master secret).
-         * Hence, we also don't have to store this public key either.
-         *
-         * When WOLFSSL_ASYNC_CRYPT is enabled, this handling is not possible
-         * for the hybrid case, as the ECC part is performed asynchronously,
-         * requiring the key share data to be stored.
-         */
-        ke = (byte *)&input[offset];
-    } else
-#endif
-    {
-        /* Store a copy in the key share object. */
-        ke = (byte*)XMALLOC(keLen, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
-        if (ke == NULL)
-            return MEMORY_E;
-        XMEMCPY(ke, &input[offset], keLen);
-    }
+    /* Store a copy in the key share object. */
+    ke = (byte*)XMALLOC(keLen, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
+    if (ke == NULL)
+        return MEMORY_E;
+    XMEMCPY(ke, &input[offset], keLen);
 
     /* Populate a key share object in the extension. */
     ret = TLSX_KeyShare_Use(ssl, group, keLen, ke, kse, extensions);
     if (ret != 0) {
-        if (ke != &input[offset]) {
-            XFREE(ke, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
-        }
+        XFREE(ke, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
         return ret;
     }
 
@@ -11102,46 +11053,8 @@ int TLSX_KeyShare_Use(const WOLFSSL* ssl, word16 group, word16 len, byte* data,
             return ret;
     }
 
-
-#if defined(WOLFSSL_HAVE_MLKEM) && !defined(WOLFSSL_MLKEM_NO_ENCAPSULATE)
-    if (ssl->options.side == WOLFSSL_SERVER_END &&
-            WOLFSSL_NAMED_GROUP_IS_PQC(group)) {
-        if (TLSX_IsGroupSupported(group)) {
-            ret = TLSX_KeyShare_HandlePqcKeyServer((WOLFSSL*)ssl,
-                                                   keyShareEntry,
-                                                   data, len,
-                                                   ssl->arrays->preMasterSecret,
-                                                   &ssl->arrays->preMasterSz);
-            if (ret != 0)
-                return ret;
-        }
-        else {
-            XFREE(keyShareEntry->ke, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
-            keyShareEntry->ke = NULL;
-            keyShareEntry->keLen = 0;
-        }
-    }
-    else
-#if !defined(WOLFSSL_ASYNC_CRYPT)
-    if (ssl->options.side == WOLFSSL_SERVER_END &&
-             WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(group)) {
-        if (TLSX_IsGroupSupported(group)) {
-            ret = TLSX_KeyShare_HandlePqcHybridKeyServer((WOLFSSL*)ssl,
-                                                         keyShareEntry,
-                                                         data, len);
-            if (ret != 0)
-                return ret;
-        }
-        else {
-            XFREE(keyShareEntry->ke, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
-            keyShareEntry->ke = NULL;
-            keyShareEntry->keLen = 0;
-        }
-    }
-    else
-#endif
-#endif
     if (data != NULL) {
+        /* Store the peer data in the key share object. */
         XFREE(keyShareEntry->ke, ssl->heap, DYNAMIC_TYPE_PUBLIC_KEY);
         keyShareEntry->ke = data;
         keyShareEntry->keLen = len;
@@ -11329,17 +11242,15 @@ static int TLSX_KeyShare_GroupRank(const WOLFSSL* ssl, int group)
     byte numGroups;
 
     if (ssl->numGroups == 0) {
-        return 0;
+        /* If the user didn't specify a group list with a preferred order,
+         * use the internal preferred group list. */
+        groups = preferredGroup;
+        numGroups = PREFERRED_GROUP_SZ;
     }
     else {
         groups = ssl->group;
         numGroups = ssl->numGroups;
     }
-
-#ifdef HAVE_LIBOQS
-      if (!TLSX_IsGroupSupported(group))
-          return WOLFSSL_FATAL_ERROR;
-#endif
 
     for (i = 0; i < numGroups; i++) {
 #if defined(WOLFSSL_ML_KEM_USE_OLD_IDS) && \
@@ -11631,9 +11542,7 @@ int TLSX_KeyShare_Choose(const WOLFSSL *ssl, TLSX* extensions,
 
     /* Use server's preference order. */
     for (clientKSE = list; clientKSE != NULL; clientKSE = clientKSE->next) {
-        if ((clientKSE->ke == NULL) &&
-            (!WOLFSSL_NAMED_GROUP_IS_PQC(clientKSE->group)) &&
-            (!WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(clientKSE->group)))
+        if (clientKSE->ke == NULL)
             continue;
 
 #ifdef WOLFSSL_SM2
@@ -11722,26 +11631,17 @@ int TLSX_KeyShare_Setup(WOLFSSL *ssl, KeyShareEntry* clientKSE)
         return ret;
 
     if (clientKSE->key == NULL) {
-#ifdef WOLFSSL_HAVE_MLKEM
-        if (WOLFSSL_NAMED_GROUP_IS_PQC(clientKSE->group)
-    #if !defined(WOLFSSL_ASYNC_CRYPT)
-            || WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(clientKSE->group)
-    #endif
-        ) {
-            /* Going to need the public key (AKA ciphertext). */
-            serverKSE->pubKey = clientKSE->pubKey;
-            clientKSE->pubKey = NULL;
-            serverKSE->pubKeyLen = clientKSE->pubKeyLen;
-            clientKSE->pubKeyLen = 0;
+#if defined(WOLFSSL_HAVE_MLKEM) && !defined(WOLFSSL_MLKEM_NO_ENCAPSULATE)
+        if (WOLFSSL_NAMED_GROUP_IS_PQC(clientKSE->group)) {
+            ret = TLSX_KeyShare_HandlePqcKeyServer(ssl, serverKSE,
+                    clientKSE->ke, clientKSE->keLen,
+                    ssl->arrays->preMasterSecret, &ssl->arrays->preMasterSz);
         }
-        else
-    #if defined(WOLFSSL_ASYNC_CRYPT)
-        if (WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(clientKSE->group)) {
+        else if (WOLFSSL_NAMED_GROUP_IS_PQC_HYBRID(clientKSE->group)) {
             ret = TLSX_KeyShare_HandlePqcHybridKeyServer(ssl, serverKSE,
                     clientKSE->ke, clientKSE->keLen);
         }
         else
-    #endif
 #endif
         {
             ret = TLSX_KeyShare_GenKey(ssl, serverKSE);
@@ -11894,14 +11794,22 @@ static int TLSX_PreSharedKey_GetSize(PreSharedKey* list, byte msgType,
 {
     if (msgType == client_hello) {
         /* Length of identities + Length of binders. */
-        word16 len = OPAQUE16_LEN + OPAQUE16_LEN;
+        word32 len = OPAQUE16_LEN + OPAQUE16_LEN;
         while (list != NULL) {
             /* Each entry has: identity, ticket age and binder. */
             len += OPAQUE16_LEN + list->identityLen + OPAQUE32_LEN +
-                   OPAQUE8_LEN + (word16)list->binderLen;
+                   OPAQUE8_LEN + (word32)list->binderLen;
+            if (len > WOLFSSL_MAX_16BIT) {
+                WOLFSSL_ERROR_VERBOSE(LENGTH_ERROR);
+                return LENGTH_ERROR;
+            }
             list = list->next;
         }
-        *pSz += len;
+        if ((word32)*pSz + len > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_ERROR_VERBOSE(LENGTH_ERROR);
+            return LENGTH_ERROR;
+        }
+        *pSz += (word16)len;
         return 0;
     }
 
@@ -11924,7 +11832,7 @@ static int TLSX_PreSharedKey_GetSize(PreSharedKey* list, byte msgType,
 int TLSX_PreSharedKey_GetSizeBinders(PreSharedKey* list, byte msgType,
                                      word16* pSz)
 {
-    word16 len;
+    word32 len;
 
     if (msgType != client_hello) {
         WOLFSSL_ERROR_VERBOSE(SANITY_MSG_E);
@@ -11934,11 +11842,15 @@ int TLSX_PreSharedKey_GetSizeBinders(PreSharedKey* list, byte msgType,
     /* Length of all binders. */
     len = OPAQUE16_LEN;
     while (list != NULL) {
-        len += OPAQUE8_LEN + (word16)list->binderLen;
+        len += OPAQUE8_LEN + (word32)list->binderLen;
+        if (len > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_ERROR_VERBOSE(LENGTH_ERROR);
+            return LENGTH_ERROR;
+        }
         list = list->next;
     }
 
-    *pSz = len;
+    *pSz = (word16)len;
     return 0;
 }
 
@@ -12368,6 +12280,89 @@ int TLSX_PreSharedKey_Use(TLSX** extensions, const byte* identity, word16 len,
 #define PSK_PARSE(a, b, c, d) 0
 
 #endif
+
+/******************************************************************************/
+/* Certificate Authentication with External Pre-Shared Key                    */
+/******************************************************************************/
+
+#if defined(WOLFSSL_TLS13) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    !defined(NO_PSK)
+
+static int TLSX_CertWithExternPsk_GetSize(byte msgType, word16* pSz)
+{
+    (void)msgType;
+    (void)pSz;
+    /* Zero-length extension - nothing to add. */
+    return 0;
+}
+
+static int TLSX_CertWithExternPsk_Write(byte* output, byte msgType,
+    word16* pSz)
+{
+    (void)output;
+    (void)msgType;
+    (void)pSz;
+    /* Zero-length extension - nothing to write. */
+    return 0;
+}
+
+static int TLSX_CertWithExternPsk_Parse(WOLFSSL* ssl, byte msgType)
+{
+    if (msgType == client_hello) {
+        /* Server has not opted in - treat the extension as unknown. */
+        if (!ssl->options.certWithExternPsk)
+            return 0;
+        /* Record that the client offered the extension, leaving resp=0.
+         * CheckPreSharedKeys() is the sole writer that flips resp to 1, and
+         * only after confirming that a non-ticket PSK was matched. */
+        if (TLSX_Find(ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK) == NULL) {
+            return TLSX_Push(&ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK,
+                NULL, ssl->heap);
+        }
+        return 0;
+    }
+
+    if (msgType == server_hello) {
+        if (TLSX_Find(ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK) == NULL) {
+            WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+            return EXT_NOT_ALLOWED;
+        }
+        ssl->options.certWithExternPsk = 1;
+        return 0;
+    }
+
+    WOLFSSL_ERROR_VERBOSE(SANITY_MSG_E);
+    return SANITY_MSG_E;
+}
+
+int TLSX_CertWithExternPsk_Use(WOLFSSL* ssl)
+{
+    TLSX* extension = TLSX_Find(ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK);
+
+    if (extension == NULL) {
+        int ret = TLSX_Push(&ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK, NULL,
+            ssl->heap);
+        if (ret != 0)
+            return ret;
+        extension = TLSX_Find(ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK);
+        if (extension == NULL)
+            return MEMORY_E;
+    }
+    extension->resp = 1;
+    return 0;
+}
+
+#define PSK_WITH_CERT_GET_SIZE  TLSX_CertWithExternPsk_GetSize
+#define PSK_WITH_CERT_WRITE     TLSX_CertWithExternPsk_Write
+#define PSK_WITH_CERT_PARSE     TLSX_CertWithExternPsk_Parse
+
+#else
+
+#define PSK_WITH_CERT_GET_SIZE(a, b) 0
+#define PSK_WITH_CERT_WRITE(a, b, c) 0
+#define PSK_WITH_CERT_PARSE(a, b) 0
+
+#endif /* WOLFSSL_TLS13 && WOLFSSL_CERT_WITH_EXTERN_PSK */
 
 /******************************************************************************/
 /* PSK Key Exchange Modes                                                     */
@@ -13439,7 +13434,6 @@ void TLSX_Remove(TLSX** list, TLSX_Type type, void* heap)
 
 #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
 #define GREASE_ECH_SIZE 160
-#define MAX_PUBLIC_NAME_SZ 256
 #define TLS_INFO_CONST_STRING "tls ech"
 #define TLS_INFO_CONST_STRING_SZ 7
 
@@ -13696,7 +13690,7 @@ static int TLSX_ECH_Write(WOLFSSL_ECH* ech, byte msgType, byte* writeBuf,
                 writeBuf_p += ech->encLen;
             }
             /* innerClientHelloLen */
-            c16toa(ech->innerClientHelloLen, writeBuf_p);
+            c16toa((word16)ech->innerClientHelloLen, writeBuf_p);
             writeBuf_p += 2;
             /* set payload offset for when we finalize */
             ech->outerClientPayload = writeBuf_p;
@@ -13775,6 +13769,8 @@ static int TLSX_ECH_CheckInnerPadding(WOLFSSL* ssl, WOLFSSL_ECH* ech)
     headerSz = ssl->options.dtls ? DTLS13_HANDSHAKE_HEADER_SZ :
                                    HANDSHAKE_HEADER_SZ;
 #else
+    (void)ssl;
+
     headerSz = HANDSHAKE_HEADER_SZ;
 #endif
 
@@ -13814,7 +13810,6 @@ static int TLSX_ECH_CheckInnerPadding(WOLFSSL* ssl, WOLFSSL_ECH* ech)
         acc |= innerCh[i];
     }
     if (acc != 0) {
-        SendAlert(ssl, alert_fatal, illegal_parameter);
         return INVALID_PARAMETER;
     }
 
@@ -13899,14 +13894,14 @@ static const byte* TLSX_ECH_FindOuterExtension(const byte* outerCh,
 
 /* If newinnerCh is NULL, validate ordering and existence of references
  *   - updates newInnerChLen with total length of selected extensions
- * If newinnerCh in not NULL, copy extensions into newInnerCh
+ * If newinnerCh is not NULL, copy extensions into newInnerCh
  *
  * outerCh          The outer ClientHello buffer.
  * outerChLen       Outer ClientHello length.
  * newInnerCh       The inner ClientHello buffer.
  * newInnerChLen    Inner ClientHello length.
  * numOuterRefs     Number of references described by OuterExtensions extension.
- * numOuterTypes    References described by OuterExtensions extension.
+ * OuterRefTypes    References described by OuterExtensions extension.
  * returns 0 on success and otherwise failure.
  */
 static int TLSX_ECH_CopyOuterExtensions(const byte* outerCh, word32 outerChLen,
@@ -13917,55 +13912,43 @@ static int TLSX_ECH_CopyOuterExtensions(const byte* outerCh, word32 outerChLen,
     word16 refType;
     word32 outerExtLen;
     word32 outerExtOffset = 0;
-    word16 extsStart;
-    word16 extsLen;
+    word16 extsStart = 0;
+    word16 extsLen = 0;
     const byte* outerExtData;
 
     if (newInnerCh == NULL) {
         *newInnerChLen = 0;
-
-        while (numOuterRefs-- > 0) {
-            ato16(outerRefTypes, &refType);
-
-            if (refType == TLSXT_ECH) {
-                WOLFSSL_MSG("ECH: ech_outer_extensions references ECH");
-                ret = INVALID_PARAMETER;
-                break;
-            }
-
-            outerExtData = TLSX_ECH_FindOuterExtension(outerCh, outerChLen,
-                                refType, &outerExtLen, &outerExtOffset,
-                                &extsStart, &extsLen);
-
-            if (outerExtData == NULL) {
-                WOLFSSL_MSG("ECH: referenced extension not in outer CH");
-                ret = INVALID_PARAMETER;
-                break;
-            }
-
-            *newInnerChLen += outerExtLen;
-
-            outerRefTypes += OPAQUE16_LEN;
-        }
     }
-    else {
-        while (numOuterRefs-- > 0) {
-            ato16(outerRefTypes, &refType);
 
-            outerExtData = TLSX_ECH_FindOuterExtension(outerCh, outerChLen,
-                                refType, &outerExtLen, &outerExtOffset,
-                                &extsStart, &extsLen);
+    while (numOuterRefs-- > 0) {
+        ato16(outerRefTypes, &refType);
 
-            if (outerExtData == NULL) {
-                ret = INVALID_PARAMETER;
-                break;
-            }
+        if (refType == TLSXT_ECH) {
+            WOLFSSL_MSG("ECH: ech_outer_extensions references ECH");
+            ret = INVALID_PARAMETER;
+            break;
+        }
 
+        outerExtData = TLSX_ECH_FindOuterExtension(outerCh, outerChLen,
+                            refType, &outerExtLen, &outerExtOffset,
+                            &extsStart, &extsLen);
+
+        if (outerExtData == NULL) {
+            WOLFSSL_MSG("ECH: referenced extension not in outer CH or out "
+                        "of order");
+            ret = INVALID_PARAMETER;
+            break;
+        }
+
+        if (newInnerCh == NULL) {
+            *newInnerChLen += outerExtLen;
+        }
+        else {
             XMEMCPY(*newInnerCh, outerExtData, outerExtLen);
             *newInnerCh += outerExtLen;
-
-            outerRefTypes += OPAQUE16_LEN;
         }
+
+        outerRefTypes += OPAQUE16_LEN;
     }
 
     return ret;
@@ -14091,6 +14074,9 @@ static int TLSX_ECH_ExpandOuterExtensions(WOLFSSL* ssl, WOLFSSL_ECH* ech,
 
     newInnerChLen = innerChLen - echOuterExtLen + extraSize - sessionIdLen +
                         ssl->session->sessionIDSz;
+    if (newInnerChLen > 0xFFFF) {
+        return BUFFER_E;
+    }
 
     if (!foundEchOuter && sessionIdLen == ssl->session->sessionIDSz) {
         /* no extensions + no sessionID to copy */
@@ -14130,6 +14116,9 @@ static int TLSX_ECH_ExpandOuterExtensions(WOLFSSL* ssl, WOLFSSL_ECH* ech,
                 sessionIdLen, copyLen);
     }
     else {
+        innerExtIdx = headerSz + innerExtIdx - OPAQUE16_LEN -
+            sessionIdLen + ssl->session->sessionIDSz;
+
         copyLen = echOuterExtIdx - OPAQUE16_LEN - RAN_LEN - OPAQUE8_LEN -
                 sessionIdLen;
         XMEMCPY(newInnerChRef, innerCh + OPAQUE16_LEN + RAN_LEN + OPAQUE8_LEN +
@@ -14138,7 +14127,7 @@ static int TLSX_ECH_ExpandOuterExtensions(WOLFSSL* ssl, WOLFSSL_ECH* ech,
 
         /* update extensions length in the new ClientHello */
         c16toa(innerExtLen - echOuterExtLen + (word16)extraSize,
-               newInnerChRef - OPAQUE16_LEN);
+                newInnerCh + innerExtIdx);
 
         ret = TLSX_ECH_CopyOuterExtensions(outerCh, outerChLen, &newInnerChRef,
                 &newInnerChLen, numOuterRefs, outerRefTypes);
@@ -14155,7 +14144,7 @@ static int TLSX_ECH_ExpandOuterExtensions(WOLFSSL* ssl, WOLFSSL_ECH* ech,
     if (ret == 0) {
         XFREE(ech->innerClientHello, heap, DYNAMIC_TYPE_TMP_BUFFER);
         ech->innerClientHello = newInnerCh;
-        ech->innerClientHelloLen = (word16)newInnerChLen;
+        ech->innerClientHelloLen = newInnerChLen;
         newInnerCh = NULL;
     }
 
@@ -14173,6 +14162,7 @@ static int TLSX_ExtractEch(WOLFSSL_ECH* ech, WOLFSSL_EchConfig* echConfig,
 {
     int ret = 0;
     int i;
+    int allocatedHpke = 0;
     word32 rawConfigLen = 0;
     byte* info = NULL;
     word32 infoLen = 0;
@@ -14193,6 +14183,7 @@ static int TLSX_ExtractEch(WOLFSSL_ECH* ech, WOLFSSL_EchConfig* echConfig,
     }
     /* check if hpke already exists, may if HelloRetryRequest */
     if (ech->hpke == NULL) {
+        allocatedHpke = 1;
         ech->hpke = (Hpke*)XMALLOC(sizeof(Hpke), heap, DYNAMIC_TYPE_TMP_BUFFER);
         if (ech->hpke == NULL)
             ret = MEMORY_E;
@@ -14241,8 +14232,9 @@ static int TLSX_ExtractEch(WOLFSSL_ECH* ech, WOLFSSL_EchConfig* echConfig,
             ech->outerClientPayload, ech->innerClientHelloLen,
             ech->innerClientHello + HANDSHAKE_HEADER_SZ);
     }
-    /* free the hpke and context on failure */
-    if (ret != 0) {
+    /* only free hpke/hpkeContext if allocated in this call; otherwise preserve
+     * them for clientHello2 */
+    if (ret != 0 && allocatedHpke) {
         XFREE(ech->hpke, heap, DYNAMIC_TYPE_TMP_BUFFER);
         ech->hpke = NULL;
         XFREE(ech->hpkeContext, heap, DYNAMIC_TYPE_TMP_BUFFER);
@@ -14269,6 +14261,7 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
     word32 offset = 0;
     word16 len;
     word16 tmpVal16;
+    word16 lenCh;
 
     WOLFSSL_MSG("TLSX_ECH_Parse");
     if (ssl->options.disableECH) {
@@ -14280,16 +14273,36 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
 
     /* retry configs */
     if (msgType == encrypted_extensions) {
-        ret = wolfSSL_SetEchConfigs(ssl, readBuf, size);
+        /* configs must only be sent on ECH rejection (RFC9849, Section 5) */
+        if (ssl->options.echAccepted) {
+            SendAlert(ssl, alert_fatal, unsupported_extension);
+            WOLFSSL_ERROR_VERBOSE(UNSUPPORTED_EXTENSION);
+            return UNSUPPORTED_EXTENSION;
+        }
 
-        if (ret == WOLFSSL_SUCCESS)
+        ret = SetRetryConfigs(ssl, readBuf, (word32)size);
+        if (ret == WC_NO_ERR_TRACE(UNSUPPORTED_SUITE) ||
+                ret == WC_NO_ERR_TRACE(UNSUPPORTED_PROTO_VERSION)) {
+            WOLFSSL_MSG("ECH retry configs had 'bad version' or 'bad suite'");
             ret = 0;
+        }
+
+        if (ssl->echConfigs == NULL) {
+            /* on GREASE connection configs must be checked syntactically and
+             * must not be saved (RFC 9849, Section 6.2.1) */
+            FreeEchConfigs(ssl->echRetryConfigs, ssl->heap);
+            ssl->echRetryConfigs = NULL;
+        }
+
+        /* retry configs may only be accepted at the point when ECH_REQUIRED is
+         * sent */
+        ssl->options.echRetryConfigsAccepted = 0;
     }
     /* HRR with special confirmation */
     else if (msgType == hello_retry_request && ssl->echConfigs != NULL) {
         /* length must be 8 */
         if (size != ECH_ACCEPT_CONFIRMATION_SZ)
-            return BAD_FUNC_ARG;
+            return BUFFER_ERROR;
 
         /* get extension */
         echX = TLSX_Find(ssl->extensions, TLSX_ECH);
@@ -14306,17 +14319,28 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
             return BAD_FUNC_ARG;
         ech = (WOLFSSL_ECH*)echX->data;
 
+        /* if the first ECH was rejected or CH1 did not have ECH then there is
+         * no need to decrypt this one */
+        if (!ssl->options.echAccepted && ssl->options.serverState ==
+                SERVER_HELLO_RETRY_REQUEST_COMPLETE) {
+            ech->state = ECH_WRITE_RETRY_CONFIGS;
+            return 0;
+        }
+
         /* read the ech parameters before the payload */
         ech->type = *readBuf_p;
         readBuf_p++;
         offset += 1;
-        if (ech->type == ECH_TYPE_INNER) {
+        if (ssl->options.echProcessingInner && ech->type == ECH_TYPE_INNER) {
             ech->state = ECH_PARSED_INTERNAL;
             return 0;
         }
-        else if (ech->type != ECH_TYPE_OUTER) {
-            /* type MUST be INNER or OUTER */
-            return BAD_FUNC_ARG;
+        else if ((!ssl->options.echProcessingInner &&
+                  ech->type != ECH_TYPE_OUTER) ||
+                 (ssl->options.echProcessingInner &&
+                  ech->type != ECH_TYPE_INNER)) {
+            /* MUST process INNER in inner hello and OUTER in outer hello */
+            return INVALID_PARAMETER;
         }
         /* Must have kdfId, aeadId, configId, enc len and payload len. */
         if (size < offset + 2 + 2 + 1 + 2 + 2) {
@@ -14343,10 +14367,10 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
             /* Check encLen isn't more than remaining bytes minus
              * payload length. */
             if (len > size - offset - 2) {
-                return BAD_FUNC_ARG;
+                return BUFFER_ERROR;
             }
             if (len > HPKE_Npk_MAX) {
-                return BAD_FUNC_ARG;
+                return BUFFER_ERROR;
             }
             /* read enc */
             XMEMCPY(ech->enc, readBuf_p, len);
@@ -14357,27 +14381,27 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
             /* kdfId */
             ato16(readBuf_p, &tmpVal16);
             if (tmpVal16 != ech->cipherSuite.kdfId) {
-                return BAD_FUNC_ARG;
+                return INVALID_PARAMETER;
             }
             readBuf_p += 2;
             offset += 2;
             /* aeadId */
             ato16(readBuf_p, &tmpVal16);
             if (tmpVal16 != ech->cipherSuite.aeadId) {
-                return BAD_FUNC_ARG;
+                return INVALID_PARAMETER;
             }
             readBuf_p += 2;
             offset += 2;
             /* configId */
             if (*readBuf_p != ech->configId) {
-                return BAD_FUNC_ARG;
+                return INVALID_PARAMETER;
             }
             readBuf_p++;
             offset++;
             /* on an HRR the enc value MUST be empty */
             ato16(readBuf_p, &len);
             if (len != 0) {
-                return BAD_FUNC_ARG;
+                return INVALID_PARAMETER;
             }
             readBuf_p += 2;
             offset += 2;
@@ -14385,12 +14409,13 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
         readBuf_p += len;
         offset += len;
         /* read payload (encrypted CH) len */
-        ato16(readBuf_p, &ech->innerClientHelloLen);
+        ato16(readBuf_p, &lenCh);
+        ech->innerClientHelloLen = lenCh;
         readBuf_p += 2;
         offset += 2;
         /* Check payload is no bigger than remaining bytes. */
         if (ech->innerClientHelloLen > size - offset) {
-            return BAD_FUNC_ARG;
+            return BUFFER_ERROR;
         }
         if (ech->innerClientHelloLen < WC_AES_BLOCK_SIZE) {
             return BUFFER_ERROR;
@@ -14438,22 +14463,47 @@ static int TLSX_ECH_Parse(WOLFSSL* ssl, const byte* readBuf, word16 size,
                 echConfig = echConfig->next;
             }
         }
-        if (ret == 0) {
+        /* if we failed to extract/expand */
+        if (ret != 0) {
+            WOLFSSL_MSG("ECH rejected");
+
+            if (ssl->options.echAccepted == 1) {
+                /* on SH2 this is fatal */
+                SendAlert(ssl, alert_fatal, decrypt_error);
+                WOLFSSL_ERROR_VERBOSE(DECRYPT_ERROR);
+                ret = DECRYPT_ERROR;
+            }
+            else {
+                /* on SH1 prepare to write retry configs */
+                XFREE(ech->innerClientHello, ssl->heap,
+                    DYNAMIC_TYPE_TMP_BUFFER);
+                ech->innerClientHello = NULL;
+                ech->state = ECH_WRITE_RETRY_CONFIGS;
+                ret = 0;
+            }
+        }
+        else {
             ret = TLSX_ECH_CheckInnerPadding(ssl, ech);
             if (ret == 0) {
                 /* expand EchOuterExtensions if present.
                  * Also, if it exists, copy sessionID from outer hello */
                 ret = TLSX_ECH_ExpandOuterExtensions(ssl, ech, ssl->heap);
             }
+
+            if (ret == 0){
+                WOLFSSL_MSG("ECH accepted");
+                ssl->options.echAccepted = 1;
+            }
+            else {
+                WOLFSSL_MSG("ECH rejected");
+            }
         }
-        /* if we failed to extract/expand, set state to retry configs */
         if (ret != 0) {
             XFREE(ech->innerClientHello, ssl->heap, DYNAMIC_TYPE_TMP_BUFFER);
             ech->innerClientHello = NULL;
-            ech->state = ECH_WRITE_RETRY_CONFIGS;
         }
+
         XFREE(aadCopy, ssl->heap, DYNAMIC_TYPE_TMP_BUFFER);
-        return 0;
     }
 
     return ret;
@@ -14658,6 +14708,11 @@ void TLSX_FreeAll(TLSX* list, void* heap)
             case TLSX_PSK_KEY_EXCHANGE_MODES:
                 WOLFSSL_MSG("PSK Key Exchange Modes extension free");
                 break;
+        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+            case TLSX_CERT_WITH_EXTERN_PSK:
+                WOLFSSL_MSG("Cert with external PSK extension free");
+                break;
+        #endif
         #endif
     #endif
 
@@ -14671,12 +14726,10 @@ void TLSX_FreeAll(TLSX* list, void* heap)
                 WOLFSSL_MSG("Supported Versions extension free");
                 break;
 
-    #ifdef WOLFSSL_SEND_HRR_COOKIE
             case TLSX_COOKIE:
                 WOLFSSL_MSG("Cookie extension free");
                 CKE_FREE_ALL((Cookie*)extension->data, heap);
                 break;
-    #endif
 
     #ifdef WOLFSSL_EARLY_DATA
             case TLSX_EARLY_DATA:
@@ -14756,9 +14809,27 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
 {
     int    ret = 0;
     TLSX*  extension;
-    word16 length = 0;
+    /* Use a word32 accumulator so that an extension whose contribution
+     * pushes the running total past 0xFFFF is detected rather than
+     * silently wrapped (the TLS extensions block length prefix on the
+     * wire is a 2-byte field). Callees that take a word16* accumulator
+     * are invoked via a per-iteration shim (`cbShim`) and their delta
+     * is added back into the word32 total.
+     *
+     * MAINTAINER NOTE: do NOT pass &length to any *_GET_SIZE function
+     * that expects a `word16*` out-parameter -- that would be a type
+     * mismatch (UB) and would silently bypass the overflow detection
+     * below. When adding a new extension case, either:
+     *   - use `length += FOO_GET_SIZE(...)` when the helper returns a
+     *     word16 by value, or
+     *   - use the cbShim pattern: `cbShim = 0; ret = FOO_GET_SIZE(...,
+     *     &cbShim); length += cbShim;`
+     */
+    word32 length = 0;
+    word16 cbShim = 0;
     byte   isRequest = (msgType == client_hello ||
                         msgType == certificate_request);
+    (void)cbShim;
 
     while ((extension = list)) {
         list = extension->next;
@@ -14790,8 +14861,15 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
 
             case TLSX_TRUSTED_CA_KEYS:
                 /* TCA only sends the list on the request. */
-                if (isRequest)
-                    length += TCA_GET_SIZE((TCA*)extension->data);
+                if (isRequest) {
+                    word16 tcaSz = TCA_GET_SIZE((TCA*)extension->data);
+                    /* 0 on non-empty list means 16-bit overflow. */
+                    if (tcaSz == 0 && extension->data != NULL) {
+                        ret = LENGTH_ERROR;
+                        break;
+                    }
+                    length += tcaSz;
+                }
                 break;
 
             case TLSX_MAX_FRAGMENT_LENGTH:
@@ -14832,9 +14910,16 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
                         isRequest);
                 break;
 
-            case TLSX_APPLICATION_LAYER_PROTOCOL:
-                length += ALPN_GET_SIZE((ALPN*)extension->data);
+            case TLSX_APPLICATION_LAYER_PROTOCOL: {
+                word16 alpnSz = ALPN_GET_SIZE((ALPN*)extension->data);
+                /* 0 on non-empty list means 16-bit overflow. */
+                if (alpnSz == 0 && extension->data != NULL) {
+                    ret = LENGTH_ERROR;
+                    break;
+                }
+                length += alpnSz;
                 break;
+            }
 #if !defined(NO_CERTS) && !defined(WOLFSSL_NO_SIGALG)
             case TLSX_SIGNATURE_ALGORITHMS:
                 length += SA_GET_SIZE(extension->data);
@@ -14842,20 +14927,33 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
 #endif
 #if defined(HAVE_ENCRYPT_THEN_MAC) && !defined(WOLFSSL_AEAD_ONLY)
             case TLSX_ENCRYPT_THEN_MAC:
-                ret = ETM_GET_SIZE(msgType, &length);
+                cbShim = 0;
+                ret = ETM_GET_SIZE(msgType, &cbShim);
+                length += cbShim;
                 break;
 #endif /* HAVE_ENCRYPT_THEN_MAC */
 
 #if defined(WOLFSSL_TLS13) || !defined(WOLFSSL_NO_TLS12) || !defined(NO_OLD_TLS)
     #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
             case TLSX_PRE_SHARED_KEY:
+                cbShim = 0;
                 ret = PSK_GET_SIZE((PreSharedKey*)extension->data, msgType,
-                                                                       &length);
+                                                                       &cbShim);
+                length += cbShim;
                 break;
         #ifdef WOLFSSL_TLS13
             case TLSX_PSK_KEY_EXCHANGE_MODES:
-                ret = PKM_GET_SIZE((byte)extension->val, msgType, &length);
+                cbShim = 0;
+                ret = PKM_GET_SIZE((byte)extension->val, msgType, &cbShim);
+                length += cbShim;
                 break;
+        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+            case TLSX_CERT_WITH_EXTERN_PSK:
+                cbShim = 0;
+                ret = PSK_WITH_CERT_GET_SIZE(msgType, &cbShim);
+                length += cbShim;
+                break;
+        #endif
         #endif
     #endif
             case TLSX_KEY_SHARE:
@@ -14865,24 +14963,30 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
 
 #ifdef WOLFSSL_TLS13
             case TLSX_SUPPORTED_VERSIONS:
-                ret = SV_GET_SIZE(extension->data, msgType, &length);
+                cbShim = 0;
+                ret = SV_GET_SIZE(extension->data, msgType, &cbShim);
+                length += cbShim;
                 break;
 
-    #ifdef WOLFSSL_SEND_HRR_COOKIE
             case TLSX_COOKIE:
-                ret = CKE_GET_SIZE((Cookie*)extension->data, msgType, &length);
+                cbShim = 0;
+                ret = CKE_GET_SIZE((Cookie*)extension->data, msgType, &cbShim);
+                length += cbShim;
                 break;
-    #endif
 
     #ifdef WOLFSSL_EARLY_DATA
             case TLSX_EARLY_DATA:
-                ret = EDI_GET_SIZE(msgType, &length);
+                cbShim = 0;
+                ret = EDI_GET_SIZE(msgType, &cbShim);
+                length += cbShim;
                 break;
     #endif
 
     #ifdef WOLFSSL_POST_HANDSHAKE_AUTH
             case TLSX_POST_HANDSHAKE_AUTH:
-                ret = PHA_GET_SIZE(msgType, &length);
+                cbShim = 0;
+                ret = PHA_GET_SIZE(msgType, &cbShim);
+                length += cbShim;
                 break;
     #endif
 
@@ -14893,9 +14997,16 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
     #endif
 
     #if !defined(NO_CERTS) && !defined(WOLFSSL_NO_CA_NAMES)
-            case TLSX_CERTIFICATE_AUTHORITIES:
-                length += CAN_GET_SIZE(extension->data);
+            case TLSX_CERTIFICATE_AUTHORITIES: {
+                word16 canSz = CAN_GET_SIZE(extension->data);
+                /* 0 on non-empty list means 16-bit overflow. */
+                if (canSz == 0) {
+                    ret = LENGTH_ERROR;
+                    break;
+                }
+                length += canSz;
                 break;
+            }
     #endif
 #endif
 #ifdef WOLFSSL_SRTP
@@ -14935,12 +15046,29 @@ static int TLSX_GetSize(TLSX* list, byte* semaphore, byte msgType,
                 break;
         }
 
+        if (ret != 0)
+            return ret;
+
+        /* Early exit: stop accumulating as soon as the running total
+         * cannot possibly fit the 2-byte wire length. Check *before*
+         * marking the extension as processed so the semaphore is not
+         * left in an inconsistent state on the error path. */
+        if (length > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_MSG("TLSX_GetSize extension length exceeds word16");
+            return BUFFER_E;
+        }
+
         /* marks the extension as processed so ctx level */
         /* extensions don't overlap with ssl level ones. */
         TURN_ON(semaphore, TLSX_ToSemaphore((word16)extension->type));
     }
 
-    *pLength += length;
+    if ((word32)*pLength + length > WOLFSSL_MAX_16BIT) {
+        WOLFSSL_MSG("TLSX_GetSize total extensions length exceeds word16");
+        return BUFFER_E;
+    }
+
+    *pLength += (word16)length;
 
     return ret;
 }
@@ -14951,10 +15079,20 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
 {
     int    ret = 0;
     TLSX*  extension;
-    word16 offset = 0;
-    word16 length_offset = 0;
+    /* Use word32 to symmetrize with TLSX_GetSize -- a single extension can
+     * contribute up to 0x10003 bytes (4-byte type/length header + 0xFFFF
+     * payload), which would word16-overflow undetectably (e.g. wrap to a
+     * value still above prevOffset). Per-iteration and aggregate bounds are
+     * checked below before truncating back into the word16 wire fields.
+     * Callees that take a word16* offset use the cbShim pattern (init to 0,
+     * then add the returned delta to the word32 accumulator). */
+    word32 offset = 0;
+    word32 length_offset = 0;
+    word32 prevOffset;
+    word16 cbShim = 0;
     byte   isRequest = (msgType == client_hello ||
                         msgType == certificate_request);
+    (void)cbShim;
 
     while ((extension = list)) {
         list = extension->next;
@@ -14966,6 +15104,10 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
         /* ssl level extensions are expected to override ctx level ones. */
         if (!IS_OFF(semaphore, TLSX_ToSemaphore((word16)extension->type)))
             continue; /* skip! */
+
+        /* Snapshot offset to detect word16 wrap within this iteration;
+         * see matching comment in TLSX_GetSize. */
+        prevOffset = offset;
 
         /* writes extension type. */
         c16toa((word16)extension->type, output + offset);
@@ -15070,7 +15212,9 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
 #if defined(HAVE_ENCRYPT_THEN_MAC) && !defined(WOLFSSL_AEAD_ONLY)
             case TLSX_ENCRYPT_THEN_MAC:
                 WOLFSSL_MSG("Encrypt-Then-Mac extension to write");
-                ret = ETM_WRITE(extension->data, output, msgType, &offset);
+                cbShim = 0;
+                ret = ETM_WRITE(extension->data, output, msgType, &cbShim);
+                offset += cbShim;
                 break;
 #endif /* HAVE_ENCRYPT_THEN_MAC */
 
@@ -15078,16 +15222,28 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
     #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
             case TLSX_PRE_SHARED_KEY:
                 WOLFSSL_MSG("Pre-Shared Key extension to write");
+                cbShim = 0;
                 ret = PSK_WRITE((PreSharedKey*)extension->data, output + offset,
-                                                              msgType, &offset);
+                                                              msgType, &cbShim);
+                offset += cbShim;
                 break;
 
         #ifdef WOLFSSL_TLS13
             case TLSX_PSK_KEY_EXCHANGE_MODES:
                 WOLFSSL_MSG("PSK Key Exchange Modes extension to write");
+                cbShim = 0;
                 ret = PKM_WRITE((byte)extension->val, output + offset, msgType,
-                                                                       &offset);
+                                                                       &cbShim);
+                offset += cbShim;
                 break;
+        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+            case TLSX_CERT_WITH_EXTERN_PSK:
+                WOLFSSL_MSG("Cert with external PSK extension to write");
+                cbShim = 0;
+                ret = PSK_WITH_CERT_WRITE(output + offset, msgType, &cbShim);
+                offset += cbShim;
+                break;
+        #endif
         #endif
     #endif
             case TLSX_KEY_SHARE:
@@ -15099,30 +15255,36 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
 #ifdef WOLFSSL_TLS13
             case TLSX_SUPPORTED_VERSIONS:
                 WOLFSSL_MSG("Supported Versions extension to write");
+                cbShim = 0;
                 ret = SV_WRITE(extension->data, output + offset, msgType,
-                                                                       &offset);
+                                                                       &cbShim);
+                offset += cbShim;
                 break;
 
-    #ifdef WOLFSSL_SEND_HRR_COOKIE
             case TLSX_COOKIE:
                 WOLFSSL_MSG("Cookie extension to write");
+                cbShim = 0;
                 ret = CKE_WRITE((Cookie*)extension->data, output + offset,
-                                msgType, &offset);
+                                msgType, &cbShim);
+                offset += cbShim;
                 break;
-    #endif
 
     #ifdef WOLFSSL_EARLY_DATA
             case TLSX_EARLY_DATA:
                 WOLFSSL_MSG("Early Data extension to write");
+                cbShim = 0;
                 ret = EDI_WRITE(extension->val, output + offset, msgType,
-                                                                       &offset);
+                                                                       &cbShim);
+                offset += cbShim;
                 break;
     #endif
 
     #ifdef WOLFSSL_POST_HANDSHAKE_AUTH
             case TLSX_POST_HANDSHAKE_AUTH:
                 WOLFSSL_MSG("Post-Handshake Authentication extension to write");
-                ret = PHA_WRITE(output + offset, msgType, &offset);
+                cbShim = 0;
+                ret = PHA_WRITE(output + offset, msgType, &cbShim);
+                offset += cbShim;
                 break;
     #endif
 
@@ -15178,16 +15340,26 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
 #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
             case TLSX_ECH:
                 WOLFSSL_MSG("ECH extension to write");
+                cbShim = 0;
                 ret = ECH_WRITE((WOLFSSL_ECH*)extension->data, msgType,
-                    output + offset, &offset);
+                    output + offset, &cbShim);
+                offset += cbShim;
                 break;
 #endif
             default:
                 break;
         }
 
+        /* Per-extension data length is a 2-byte wire field; reject any
+         * single extension whose payload exceeds that before truncating. */
+        if (offset - length_offset > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_MSG("TLSX_Write single extension length exceeds word16");
+            return BUFFER_E;
+        }
+
         /* writes extension data length. */
-        c16toa(offset - length_offset, output + length_offset - OPAQUE16_LEN);
+        c16toa((word16)(offset - length_offset),
+               output + length_offset - OPAQUE16_LEN);
 
         /* marks the extension as processed so ctx level */
         /* extensions don't overlap with ssl level ones. */
@@ -15196,9 +15368,24 @@ static int TLSX_Write(TLSX* list, byte* output, byte* semaphore,
         /* if we encountered an error propagate it */
         if (ret != 0)
             break;
+
+        if (offset <= prevOffset) {
+            WOLFSSL_MSG("TLSX_Write extension made no progress");
+            return BUFFER_E;
+        }
     }
 
-    *pOffset += offset;
+    /* Only validate and commit the aggregate offset when the loop
+     * completed without error; on the error path, leave *pOffset
+     * unchanged and return the original failure reason so callers
+     * see the real error instead of a masking BUFFER_E. */
+    if (ret == 0) {
+        if ((word32)*pOffset + offset > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_MSG("TLSX_Write total extensions length exceeds word16");
+            return BUFFER_E;
+        }
+        *pOffset += (word16)offset;
+    }
 
     return ret;
 }
@@ -15756,11 +15943,7 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
                     namedGroup = preferredGroup[0];
                     for (i = 0; i < ssl->numGroups && !set; i++) {
                         for (j = 0; preferredGroup[j] != WOLFSSL_NAMED_GROUP_INVALID; j++) {
-                            if (preferredGroup[j] == ssl->group[i]
-#ifdef HAVE_LIBOQS
-                                && TLSX_IsGroupSupported(preferredGroup[j])
-#endif
-                                                                ) {
+                            if (preferredGroup[j] == ssl->group[i]) {
                                 namedGroup = ssl->group[i];
                                 set = 1;
                                 break;
@@ -15773,17 +15956,6 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
                 else {
                     /* Choose the most preferred group. */
                     namedGroup = preferredGroup[0];
-#ifdef HAVE_LIBOQS
-                    if (!TLSX_IsGroupSupported(namedGroup)) {
-                        int i = 1;
-                        for (;preferredGroup[i] != WOLFSSL_NAMED_GROUP_INVALID;
-                              i++) {
-                            if (TLSX_IsGroupSupported(preferredGroup[i]))
-                                break;
-                        }
-                        namedGroup = preferredGroup[i];
-                    }
-#endif
                 }
             }
             else {
@@ -15803,7 +15975,11 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
             TLSX_Remove(&ssl->extensions, TLSX_PRE_SHARED_KEY, ssl->heap);
         #endif
         #if defined(HAVE_SESSION_TICKET)
-            if (ssl->options.resuming && ssl->session->ticketLen > 0) {
+            if (ssl->options.resuming && ssl->session->ticketLen > 0
+        #if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+                && !ssl->options.certWithExternPsk
+        #endif
+            ) {
                 WOLFSSL_SESSION* sess = ssl->session;
             #ifdef WOLFSSL_32BIT_MILLI_TIME
                 word32 now, milli;
@@ -15998,8 +16174,14 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
                     modes = 1 << PSK_KE;
                 }
             #if !defined(NO_DH) || defined(HAVE_ECC) || \
-                              defined(HAVE_CURVE25519) || defined(HAVE_CURVE448)
+                          defined(HAVE_CURVE25519) || defined(HAVE_CURVE448)
                 if (!ssl->options.noPskDheKe) {
+                    modes |= 1 << PSK_DHE_KE;
+                }
+            #endif
+            #if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+                if (ssl->options.certWithExternPsk) {
+                    /* RFC8773bis requires psk_dhe_ke with cert_with_extern_psk. */
                     modes |= 1 << PSK_DHE_KE;
                 }
             #endif
@@ -16007,6 +16189,16 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
                 if (ret != 0)
                     return ret;
             }
+
+        #if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+            if (usingPSK && ssl->options.certWithExternPsk) {
+                ret = TLSX_CertWithExternPsk_Use(ssl);
+                if (ret != 0)
+                    return ret;
+                /* Require server confirmation before using cert-with-PSK path. */
+                ssl->options.certWithExternPsk = 0;
+            }
+        #endif
         #endif
         #if defined(WOLFSSL_POST_HANDSHAKE_AUTH)
             if (!isServer && ssl->options.postHandshakeAuth) {
@@ -16101,11 +16293,10 @@ static int TLSX_EchChangeSNI(WOLFSSL* ssl, TLSX** pEchX,
             char* hostName = ((SNI*)serverNameX->data)->data.host_name;
             word32 hostNameSz = (word32)XSTRLEN(hostName) + 1;
 
-            /* truncate if too long */
-            if (hostNameSz > MAX_PUBLIC_NAME_SZ)
-                hostNameSz = MAX_PUBLIC_NAME_SZ;
-
-            XMEMCPY(serverName, hostName, hostNameSz);
+            if (hostNameSz > WOLFSSL_HOST_NAME_MAX)
+                ret = BAD_LENGTH_E;
+            else
+                XMEMCPY(serverName, hostName, hostNameSz);
         }
 
         /* only swap the SNI if one was found; extensions is non-NULL if an
@@ -16149,6 +16340,108 @@ static int TLSX_EchRestoreSNI(WOLFSSL* ssl, char* serverName,
     return ret;
 }
 
+/* Returns 1 if the extension may be encoded into ech_outer_extensions,
+ * 0 otherwise */
+static int TLSX_ECH_IsEncodable(word16 type)
+{
+    /* supported_versions being here prevents the inner hello from advertising
+     * a version less than TLS1.3 */
+    switch (type) {
+        case TLSX_SERVER_NAME:
+        case TLSX_APPLICATION_LAYER_PROTOCOL:
+        case TLSX_SUPPORTED_VERSIONS:
+        case TLSX_ECH:
+#if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
+        case TLSX_PRE_SHARED_KEY:
+#endif
+#ifdef WOLFSSL_EARLY_DATA
+        case TLSX_EARLY_DATA:
+#endif
+            return 0;
+        default:
+            return 1;
+    }
+}
+
+/* find extensions that can be encoded into ech_outer_extensions.
+ * If output is non-NULL, then write the encoded form.
+ *
+ * Layout of OuterExtensions (RFC 9849, S5.1):
+ *   2-byte extension_type + 2-byte extension_data length +
+ *   1-byte list length    + 2*count bytes of extension types
+ */
+static int TLSX_ECH_BuildOuterExtensions(WOLFSSL* ssl, const byte* semaphore,
+    byte msgType, byte* output, word16* pOffset, word16* outCount,
+    byte* encodeMask)
+{
+    TLSX* list;
+    TLSX* extension;
+    byte* typesStart = NULL;
+    int listIdx;
+    word16 count = 0;
+    byte isRequest = (msgType == client_hello ||
+                      msgType == certificate_request);
+    byte seen[SEMAPHORE_SIZE];
+
+    /* backup semaphore so it can be aliased by encodeMask */
+    XMEMCPY(seen, semaphore, SEMAPHORE_SIZE);
+
+    if (output != NULL && pOffset != NULL) {
+        typesStart = output + *pOffset
+                     + HELLO_EXT_TYPE_SZ + OPAQUE16_LEN + OPAQUE8_LEN;
+    }
+
+    for (listIdx = 0; listIdx < 2; listIdx++) {
+        list = (listIdx == 0) ? ssl->extensions :
+            (ssl->ctx != NULL ? ssl->ctx->extensions : NULL);
+        for (extension = list; extension != NULL; extension = extension->next) {
+            word16 type = (word16)extension->type;
+            word16 semIdx = TLSX_ToSemaphore(type);
+
+            /* OuterExtensions is <2..254>, so reference at most 127 types */
+            if (count >= 127) {
+                WOLFSSL_MSG("ECH: cannot encode more than 127 extensions");
+                break;
+            }
+
+            if (!isRequest && !extension->resp)
+                continue;
+            if (!IS_OFF(seen, semIdx))
+                continue;
+            TURN_ON(seen, semIdx);
+            if (!TLSX_ECH_IsEncodable(type))
+                continue;
+
+            if (typesStart != NULL)
+                c16toa(type, typesStart + count * OPAQUE16_LEN);
+            count++;
+            TURN_ON(encodeMask, semIdx);
+        }
+    }
+
+    if (count > 0 && pOffset != NULL) {
+        word16 listLen = (word16)(OPAQUE16_LEN * count);
+        word16 blockSz = (word16)(HELLO_EXT_TYPE_SZ + OPAQUE16_LEN
+                                + OPAQUE8_LEN + listLen);
+        if ((word32)*pOffset + blockSz > WOLFSSL_MAX_16BIT) {
+            WOLFSSL_MSG("ECH OuterExtensions overflows extensions length");
+            return BUFFER_E;
+        }
+        if (output != NULL) {
+            byte* hdr = output + *pOffset;
+            c16toa(TLSXT_ECH_OUTER_EXTENSIONS, hdr);
+            c16toa((word16)(OPAQUE8_LEN + listLen), hdr + OPAQUE16_LEN);
+            hdr[OPAQUE16_LEN + OPAQUE16_LEN] = (byte)listLen;
+        }
+
+        /* accumulate offset even if nothing is written */
+        *pOffset += blockSz;
+    }
+
+    *outCount = count;
+    return 0;
+}
+
 /* because the size of ech depends on the size of other extensions we need to
  * get the size with ech special and process ech last, return status */
 static int TLSX_GetSizeWithEch(WOLFSSL* ssl, byte* semaphore, byte msgType,
@@ -16158,12 +16451,32 @@ static int TLSX_GetSizeWithEch(WOLFSSL* ssl, byte* semaphore, byte msgType,
     TLSX* echX = NULL;
     TLSX* serverNameX = NULL;
     TLSX** extensions = NULL;
-    WC_DECLARE_VAR(serverName, char, MAX_PUBLIC_NAME_SZ, 0);
+    WOLFSSL_ECH* ech = NULL;
+    word16 count = 0;
+    WC_DECLARE_VAR(serverName, char, WOLFSSL_HOST_NAME_MAX, 0);
 
-    WC_ALLOC_VAR_EX(serverName, char, MAX_PUBLIC_NAME_SZ, NULL,
+    WC_ALLOC_VAR_EX(serverName, char, WOLFSSL_HOST_NAME_MAX, NULL,
                     DYNAMIC_TYPE_TMP_BUFFER, return MEMORY_E);
+
     r = TLSX_EchChangeSNI(ssl, &echX, serverName, &serverNameX, &extensions);
-    if (r == 0 && ssl->extensions)
+
+    if (echX != NULL)
+        ech = (WOLFSSL_ECH*)echX->data;
+
+    /* If ECH won't be written exclude it from the size calculation */
+    if (r == 0 && !ssl->options.echAccepted && ech != NULL &&
+            ech->innerCount != 0) {
+        TURN_ON(semaphore, TLSX_ToSemaphore(echX->type));
+    }
+
+    /* if encoding, then count encoded form of inner ClientHello.
+     * `semaphore` is in/out so encodable extensions will later be ignored */
+    if (r == 0 && ech != NULL && ech->type == ECH_TYPE_INNER &&
+            ech->writeEncoded) {
+        ret = TLSX_ECH_BuildOuterExtensions(ssl, semaphore, msgType,
+            NULL, pLength, &count, semaphore);
+    }
+    if (r == 0 && ret == 0 && ssl->extensions)
         ret = TLSX_GetSize(ssl->extensions, semaphore, msgType, pLength);
     if (r == 0 && ret == 0 && ssl->ctx && ssl->ctx->extensions)
         ret = TLSX_GetSize(ssl->ctx->extensions, semaphore, msgType, pLength);
@@ -16283,6 +16596,13 @@ int TLSX_GetRequestSize(WOLFSSL* ssl, byte msgType, word32* pLength)
     }
 #endif
 
+    /* The TLS extensions block length prefix is a 2-byte field, so any
+     * accumulated total above 0xFFFF must be rejected rather than silently
+     * truncating and producing a short, malformed handshake message. */
+    if (length > (word16)(WOLFSSL_MAX_16BIT - OPAQUE16_LEN)) {
+        WOLFSSL_MSG("TLSX_GetRequestSize extensions exceed word16");
+        return BUFFER_E;
+    }
     if (length)
         length += OPAQUE16_LEN; /* for total length storage. */
 
@@ -16300,27 +16620,62 @@ static int TLSX_WriteWithEch(WOLFSSL* ssl, byte* output, byte* semaphore,
     TLSX* echX = NULL;
     TLSX* serverNameX = NULL;
     TLSX** extensions = NULL;
-    WC_DECLARE_VAR(serverName, char, MAX_PUBLIC_NAME_SZ, 0);
+    WOLFSSL_ECH* ech = NULL;
+    WC_DECLARE_VAR(serverName, char, WOLFSSL_HOST_NAME_MAX, 0);
 
-    WC_ALLOC_VAR_EX(serverName, char, MAX_PUBLIC_NAME_SZ, NULL,
+    WC_ALLOC_VAR_EX(serverName, char, WOLFSSL_HOST_NAME_MAX, NULL,
                     DYNAMIC_TYPE_TMP_BUFFER, return MEMORY_E);
     r = TLSX_EchChangeSNI(ssl, &echX, serverName, &serverNameX, &extensions);
     ret = r;
-    if (ret == 0 && echX != NULL)
+    if (ret == 0 && echX != NULL) {
+        ech = (WOLFSSL_ECH*)echX->data;
         /* turn ech on so it doesn't write, then write it last */
         TURN_ON(semaphore, TLSX_ToSemaphore(echX->type));
+    }
 
+    /* for ECH inner, print the encodable block first, then the non-encodables.
+     * This allows the same transcript to be produced on either side
+     * (the transcript is over the expanded form). */
+    if (ret == 0 && ech != NULL && ech->type == ECH_TYPE_INNER) {
+        byte encodeMask[SEMAPHORE_SIZE];
+        byte* mask = ech->writeEncoded ? semaphore : encodeMask;
+        word16 count = 0;
+        int i;
+
+        XMEMSET(encodeMask, 0, SEMAPHORE_SIZE);
+
+        ret = TLSX_ECH_BuildOuterExtensions(ssl, semaphore, msgType,
+            ech->writeEncoded ? output : NULL,
+            ech->writeEncoded ? pOffset : NULL,
+            &count, mask);
+        if (ret == 0 && count >= 1 && !ech->writeEncoded) {
+            /* expanded: print encodable block normally */
+            for (i = 0; i < SEMAPHORE_SIZE; i++) {
+                semaphore[i] |= encodeMask[i];
+                encodeMask[i] = (byte)~encodeMask[i];
+            }
+            if (ssl->extensions) {
+                ret = TLSX_Write(ssl->extensions, output + *pOffset,
+                        encodeMask, msgType, pOffset);
+            }
+            if (ret == 0 && ssl->ctx && ssl->ctx->extensions) {
+                ret = TLSX_Write(ssl->ctx->extensions, output + *pOffset,
+                        encodeMask, msgType, pOffset);
+            }
+        }
+    }
+
+    /* print non-encodable block */
     if (ret == 0 && ssl->extensions) {
         ret = TLSX_Write(ssl->extensions, output + *pOffset, semaphore,
                          msgType, pOffset);
     }
-
     if (ret == 0 && ssl->ctx && ssl->ctx->extensions) {
         ret = TLSX_Write(ssl->ctx->extensions, output + *pOffset, semaphore,
                          msgType, pOffset);
     }
 
-    /* only write if have a shot at acceptance */
+    /* only write ECH if there is a shot at acceptance */
     if (ret == 0 && echX != NULL &&
         (ssl->options.echAccepted ||
         ((WOLFSSL_ECH*)echX->data)->innerCount == 0)) {
@@ -16486,6 +16841,12 @@ int TLSX_WriteRequest(WOLFSSL* ssl, byte* output, byte msgType, word32* pOffset)
     #endif
 #endif
 
+    /* Wrap detection for the TLSX_Write calls above is handled inside
+     * TLSX_Write itself: any iteration that would push the local word16
+     * offset past 0xFFFF returns BUFFER_E so we never reach here with a
+     * truncated value. The TLS extensions block length prefix on the
+     * wire is a 2-byte field, matching this invariant. */
+
     if (offset > OPAQUE16_LEN || msgType != client_hello)
         c16toa(offset - OPAQUE16_LEN, output); /* extensions length */
 
@@ -16524,6 +16885,9 @@ int TLSX_GetResponseSize(WOLFSSL* ssl, byte msgType, word16* pLength)
                 #endif
                 #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
                     TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_PRE_SHARED_KEY));
+                #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+                    TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_CERT_WITH_EXTERN_PSK));
+                #endif
                 #endif
                 }
             #if !defined(WOLFSSL_NO_TLS12) || !defined(NO_OLD_TLS)
@@ -16580,6 +16944,9 @@ int TLSX_GetResponseSize(WOLFSSL* ssl, byte msgType, word16* pLength)
         #endif
         #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
             TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_PRE_SHARED_KEY));
+        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+            TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_CERT_WITH_EXTERN_PSK));
+        #endif
         #endif
         #ifdef HAVE_CERTIFICATE_STATUS_REQUEST
             TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_STATUS_REQUEST));
@@ -16672,6 +17039,9 @@ int TLSX_WriteResponse(WOLFSSL *ssl, byte* output, byte msgType, word16* pOffset
             #endif
             #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
                     TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_PRE_SHARED_KEY));
+            #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+                    TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_CERT_WITH_EXTERN_PSK));
+            #endif
             #endif
                 }
                 else
@@ -16705,11 +17075,6 @@ int TLSX_WriteResponse(WOLFSSL *ssl, byte* output, byte msgType, word16* pOffset
                     TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_KEY_SHARE));
                 }
         #endif
-#ifdef HAVE_ECH
-                /* send the special confirmation */
-                TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_ECH));
-#endif
-                /* Cookie is written below as last extension. */
                 break;
     #endif
 
@@ -16728,6 +17093,9 @@ int TLSX_WriteResponse(WOLFSSL *ssl, byte* output, byte msgType, word16* pOffset
         #endif
         #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
                 TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_PRE_SHARED_KEY));
+        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+                TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_CERT_WITH_EXTERN_PSK));
+        #endif
         #endif
         #ifdef HAVE_CERTIFICATE_STATUS_REQUEST
                 TURN_ON(semaphore, TLSX_ToSemaphore(TLSX_STATUS_REQUEST));
@@ -16783,6 +17151,18 @@ int TLSX_WriteResponse(WOLFSSL *ssl, byte* output, byte msgType, word16* pOffset
         if (msgType == hello_retry_request) {
             XMEMSET(semaphore, 0xff, SEMAPHORE_SIZE);
             TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_COOKIE));
+            ret = TLSX_Write(ssl->extensions, output + offset, semaphore,
+                             msgType, &offset);
+            if (ret != 0)
+                return ret;
+        }
+#endif
+
+#if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
+        /* write ECH last to promote interop with other implementations */
+        if (msgType == hello_retry_request) {
+            XMEMSET(semaphore, 0xff, SEMAPHORE_SIZE);
+            TURN_OFF(semaphore, TLSX_ToSemaphore(TLSX_ECH));
             ret = TLSX_Write(ssl->extensions, output + offset, semaphore,
                              msgType, &offset);
             if (ret != 0)
@@ -16900,6 +17280,8 @@ static word16 TLSX_GetMinSize_Client(word16* type)
             return WOLFSSL_CKE_MIN_SIZE_CLIENT;
         case TLSXT_PSK_KEY_EXCHANGE_MODES:
             return WOLFSSL_PKM_MIN_SIZE_CLIENT;
+        case TLSXT_CERT_WITH_EXTERN_PSK:
+            return WOLFSSL_CWEP_MIN_SIZE_CLIENT;
         case TLSXT_CERTIFICATE_AUTHORITIES:
             return WOLFSSL_CAN_MIN_SIZE_CLIENT;
         case TLSXT_POST_HANDSHAKE_AUTH:
@@ -16969,6 +17351,8 @@ static word16 TLSX_GetMinSize_Server(const word16 *type)
             return WOLFSSL_CKE_MIN_SIZE_SERVER;
         case TLSXT_PSK_KEY_EXCHANGE_MODES:
             return WOLFSSL_PKM_MIN_SIZE_SERVER;
+        case TLSXT_CERT_WITH_EXTERN_PSK:
+            return WOLFSSL_CWEP_MIN_SIZE_SERVER;
         case TLSXT_CERTIFICATE_AUTHORITIES:
             return WOLFSSL_CAN_MIN_SIZE_SERVER;
         case TLSXT_POST_HANDSHAKE_AUTH:
@@ -16996,8 +17380,8 @@ static word16 TLSX_GetMinSize_Server(const word16 *type)
 
 
 /** Parses a buffer of TLS extensions. */
-int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
-                                                                 Suites *suites)
+WOLFSSL_TEST_VIS int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length,
+                                byte msgType, Suites *suites)
 {
     int ret = 0;
     word16 offset = 0;
@@ -17010,6 +17394,11 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 #if defined(WOLFSSL_TLS13) && (defined(HAVE_SESSION_TICKET) || !defined(NO_PSK))
     int pskDone = 0;
 #endif
+#if defined(WOLFSSL_TLS13) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    !defined(NO_PSK)
+    int secondClientHello = 0;
+    int prevHasPskWithCert = 0;
+#endif
     byte seenType[SEMAPHORE_SIZE];  /* Seen known extensions. */
 
     if (!ssl || !input || (isRequest && !suites))
@@ -17017,6 +17406,15 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 
     /* No known extensions seen yet. */
     XMEMSET(seenType, 0, sizeof(seenType));
+#if defined(WOLFSSL_TLS13) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    !defined(NO_PSK)
+    if (IsAtLeastTLSv1_3(ssl->version) && msgType == client_hello &&
+            ssl->msgsReceived.got_client_hello == 2) {
+        secondClientHello = 1;
+        prevHasPskWithCert =
+            TLSX_Find(ssl->extensions, TLSX_CERT_WITH_EXTERN_PSK) != NULL;
+    }
+#endif
 
     while (ret == 0 && offset < length) {
         word16 type;
@@ -17042,6 +17440,9 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
         if ((type <= 62) || (type == TLSX_RENEGOTIATION_INFO)
         #ifdef WOLFSSL_QUIC
             || (type == TLSX_KEY_QUIC_TP_PARAMS_DRAFT)
+        #endif
+        #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
+            || (type == TLSX_ECH)
         #endif
         #if defined(WOLFSSL_TLS13) && defined(WOLFSSL_DUAL_ALG_CERTS)
             || (type == TLSX_CKS)
@@ -17082,6 +17483,20 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
             default:
             break;
         }
+
+#ifdef WOLFSSL_TLS13
+        /* RFC 8446 4.4.2: extensions in a Certificate message MUST
+         * correspond to ones offered in our prior ClientHello (client) or
+         * CertificateRequest (server). Reject anything we did not offer. */
+        if (msgType == certificate &&
+            IsAtLeastTLSv1_3(ssl->version) &&
+            TLSX_Find(ssl->extensions, (TLSX_Type)type) == NULL) {
+            WOLFSSL_MSG("Cert-msg extension not offered in CH/CR");
+            SendAlert(ssl, alert_fatal, unsupported_extension);
+            WOLFSSL_ERROR_VERBOSE(UNSUPPORTED_EXTENSION);
+            return UNSUPPORTED_EXTENSION;
+        }
+#endif
 
         switch (type) {
 #ifdef HAVE_SNI
@@ -17410,8 +17825,6 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 
                 break;
 
-
-    #ifdef WOLFSSL_SEND_HRR_COOKIE
             case TLSX_COOKIE:
                 WOLFSSL_MSG("Cookie extension received");
             #ifdef WOLFSSL_DEBUG_TLS
@@ -17427,7 +17840,6 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 
                 ret = CKE_PARSE(ssl, input + offset, size, msgType);
                 break;
-    #endif
 
     #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
             case TLSX_PRE_SHARED_KEY:
@@ -17465,6 +17877,29 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 
                 ret = PKM_PARSE(ssl, input + offset, size, msgType);
                 break;
+
+    #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+            case TLSX_CERT_WITH_EXTERN_PSK:
+                WOLFSSL_MSG("Cert with external PSK extension received");
+            #ifdef WOLFSSL_DEBUG_TLS
+                WOLFSSL_BUFFER(input + offset, size);
+            #endif
+
+                if (!IsAtLeastTLSv1_3(ssl->version))
+                    break;
+
+                if (msgType != client_hello && msgType != server_hello) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+                    return EXT_NOT_ALLOWED;
+                }
+                if (size != 0) {
+                    WOLFSSL_ERROR_VERBOSE(BUFFER_ERROR);
+                    return BUFFER_ERROR;
+                }
+
+                ret = PSK_WITH_CERT_PARSE(ssl, msgType);
+                break;
+    #endif
     #endif
 
     #ifdef WOLFSSL_EARLY_DATA
@@ -17568,6 +18003,20 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 #ifdef WOLFSSL_SRTP
             case TLSX_USE_SRTP:
                 WOLFSSL_MSG("Use SRTP extension received");
+
+#if defined(WOLFSSL_TLS13)
+                if (IsAtLeastTLSv1_3(ssl->version)) {
+                    if (msgType != client_hello &&
+                        msgType != encrypted_extensions)
+                        return EXT_NOT_ALLOWED;
+                }
+                else
+#endif
+                {
+                    if (msgType != client_hello &&
+                        msgType != server_hello)
+                        return EXT_NOT_ALLOWED;
+                }
                 ret = SRTP_PARSE(ssl, input + offset, size, isRequest);
                 break;
 #endif
@@ -17662,11 +18111,49 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
 #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
             case TLSX_ECH:
                 WOLFSSL_MSG("ECH extension received");
+                if (!IsAtLeastTLSv1_3(ssl->version))
+                    break;
+
+                if (msgType != client_hello &&
+                    msgType != encrypted_extensions &&
+                    msgType != hello_retry_request) {
+                    return EXT_NOT_ALLOWED;
+                }
+
                 ret = ECH_PARSE(ssl, input + offset, size, msgType);
                 break;
+            case TLSXT_ECH_OUTER_EXTENSIONS:
+                /* RFC 9849 s5.1: ech_outer_extensions MUST only appear in
+                 * the EncodedClientHelloInner */
+                WOLFSSL_MSG("ech_outer_extensions in plaintext message");
+                WOLFSSL_ERROR_VERBOSE(INVALID_PARAMETER);
+                return INVALID_PARAMETER;
 #endif
             default:
                 WOLFSSL_MSG("Unknown TLS extension type");
+#if defined(WOLFSSL_TLS13)
+                /* RFC 8446 Sec. 4.2: a TLS 1.3 client MUST abort with an
+                 * unsupported_extension alert when it receives an extension
+                 * "response" that was not advertised in the ClientHello. The
+                 * rule applies only to messages whose extensions are responses
+                 * to the ClientHello: ServerHello, HelloRetryRequest,
+                 * EncryptedExtensions and Certificate.
+                 *
+                 * Extensions in CertificateRequest and NewSessionTicket are
+                 * independent server-initiated payloads, not responses, and
+                 * per RFC 8701 (GREASE) the server MAY include unknown
+                 * (GREASE) extension types there which the client MUST treat
+                 * like any other unknown value (i.e. ignore them). */
+                if (IsAtLeastTLSv1_3(ssl->version) &&
+                        (msgType == server_hello ||
+                         msgType == hello_retry_request ||
+                         msgType == encrypted_extensions ||
+                         msgType == certificate)) {
+                    SendAlert((WOLFSSL*)ssl, alert_fatal, unsupported_extension);
+                    WOLFSSL_ERROR_VERBOSE(UNSUPPORTED_EXTENSION);
+                    return UNSUPPORTED_EXTENSION;
+                }
+#endif
         }
 
         /* offset should be updated here! */
@@ -17687,6 +18174,71 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
     if (IsAtLeastTLSv1_3(ssl->version) && msgType == server_hello &&
         IS_OFF(seenType, TLSX_ToSemaphore(TLSX_KEY_SHARE))) {
         ssl->options.noPskDheKe = 1;
+    }
+#endif
+#if defined(WOLFSSL_TLS13) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    !defined(NO_PSK)
+    if (IsAtLeastTLSv1_3(ssl->version)) {
+        int hasPskWithCert = !IS_OFF(seenType,
+            TLSX_ToSemaphore(TLSX_CERT_WITH_EXTERN_PSK));
+        if (hasPskWithCert && ssl->options.certWithExternPsk) {
+            int hasPsk = !IS_OFF(seenType, TLSX_ToSemaphore(TLSX_PRE_SHARED_KEY));
+            int hasPskModes = !IS_OFF(seenType,
+                TLSX_ToSemaphore(TLSX_PSK_KEY_EXCHANGE_MODES));
+            int hasKeyShare = !IS_OFF(seenType, TLSX_ToSemaphore(TLSX_KEY_SHARE));
+            int hasSg = !IS_OFF(seenType,
+                TLSX_ToSemaphore(TLSX_SUPPORTED_GROUPS));
+            int hasSigAlg = !IS_OFF(seenType,
+                TLSX_ToSemaphore(TLSX_SIGNATURE_ALGORITHMS));
+#ifdef WOLFSSL_EARLY_DATA
+            int hasEarlyData = !IS_OFF(seenType, TLSX_ToSemaphore(TLSX_EARLY_DATA));
+#endif
+
+            if (msgType == client_hello && isRequest) {
+                TLSX* pskm;
+                /* RFC8773bis: CH2 after HRR must keep CH1's extension set. */
+                if (secondClientHello && !prevHasPskWithCert) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+                    return EXT_NOT_ALLOWED;
+                }
+                /* RFC8773bis: cert_with_extern_psk depends on these extensions. */
+                if (!hasPsk || !hasPskModes || !hasKeyShare || !hasSg ||
+                    !hasSigAlg) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_MISSING);
+                    return EXT_MISSING;
+                }
+#ifdef WOLFSSL_EARLY_DATA
+                /* External PSK + certificate mode forbids 0-RTT in CH.
+                 * When WOLFSSL_EARLY_DATA is not defined there is no parser
+                 * case for TLSX_EARLY_DATA, so an incoming early_data
+                 * extension is treated as unknown and ignored per RFC 8446
+                 * Sect. 4.2 - no additional check is needed in that case. */
+                if (hasEarlyData) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+                    return EXT_NOT_ALLOWED;
+                }
+#endif
+                pskm = TLSX_Find(ssl->extensions, TLSX_PSK_KEY_EXCHANGE_MODES);
+                /* RFC8773bis requires client support for psk_dhe_ke mode. */
+                if (pskm == NULL || (pskm->val & (1 << PSK_DHE_KE)) == 0) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+                    return EXT_NOT_ALLOWED;
+                }
+            }
+            else if (msgType == server_hello && !isRequest) {
+                /* SH confirming cert_with_extern_psk must also confirm PSK and KSE. */
+                if (!hasPsk || !hasKeyShare) {
+                    WOLFSSL_ERROR_VERBOSE(EXT_MISSING);
+                    return EXT_MISSING;
+                }
+            }
+        }
+        else if (msgType == client_hello && isRequest && secondClientHello &&
+                prevHasPskWithCert) {
+            /* RFC8773bis: reject dropping the extension in CH2 after HRR. */
+            WOLFSSL_ERROR_VERBOSE(EXT_NOT_ALLOWED);
+            return EXT_NOT_ALLOWED;
+        }
     }
 #endif
 #if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
@@ -17714,19 +18266,6 @@ int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length, byte msgType,
         ret = SNI_VERIFY_PARSE(ssl, isRequest);
     if (ret == 0)
         ret = TCA_VERIFY_PARSE(ssl, isRequest);
-
-#if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
-    /* If client used ECH, server HRR must include ECH confirmation */
-    if (ret == 0 && msgType == hello_retry_request && ssl->echConfigs != NULL &&
-            !ssl->options.disableECH) {
-        TLSX* echX = TLSX_Find(ssl->extensions, TLSX_ECH);
-        if (echX == NULL || ((WOLFSSL_ECH*)echX->data)->confBuf == NULL) {
-            WOLFSSL_MSG("ECH used but HRR missing ECH confirmation");
-            WOLFSSL_ERROR_VERBOSE(EXT_MISSING);
-            ret = EXT_MISSING;
-        }
-    }
-#endif
 
     WOLFSSL_LEAVE("Leaving TLSX_Parse", ret);
     return ret;

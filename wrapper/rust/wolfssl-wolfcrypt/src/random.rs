@@ -46,6 +46,7 @@ rng.generate_block(&mut buffer).expect("Failed to generate a block");
 
 use crate::sys;
 use core::mem::{size_of_val, MaybeUninit};
+use num_traits::PrimInt;
 
 /// A cryptographically secure random number generator based on the wolfSSL
 /// library.
@@ -96,7 +97,7 @@ impl RNG {
                 return Err(rc);
             }
         }
-        let mut rng: MaybeUninit<RNG> = MaybeUninit::uninit();
+        let mut wc_rng: MaybeUninit<sys::WC_RNG> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
             None => core::ptr::null_mut(),
@@ -106,10 +107,11 @@ impl RNG {
             None => sys::INVALID_DEVID,
         };
         let rc = unsafe {
-            sys::wc_InitRng_ex(&mut (*rng.as_mut_ptr()).wc_rng, heap, dev_id)
+            sys::wc_InitRng_ex(wc_rng.as_mut_ptr(), heap, dev_id)
         };
         if rc == 0 {
-            let rng = unsafe { rng.assume_init() };
+            let wc_rng = unsafe { wc_rng.assume_init() };
+            let rng = RNG {wc_rng};
             Ok(rng)
         } else {
             Err(rc)
@@ -126,7 +128,7 @@ impl RNG {
     ///
     /// A Result which is Ok(RNG) on success or an Err containing the wolfSSL
     /// library return code on failure.
-    pub fn new_with_nonce<T>(nonce: &mut [T]) -> Result<Self, i32> {
+    pub fn new_with_nonce<T: PrimInt>(nonce: &mut [T]) -> Result<Self, i32> {
         RNG::new_with_nonce_ex(nonce, None, None)
     }
 
@@ -145,7 +147,7 @@ impl RNG {
     ///
     /// A Result which is Ok(RNG) on success or an Err containing the wolfSSL
     /// library return code on failure.
-    pub fn new_with_nonce_ex<T>(nonce: &mut [T], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
+    pub fn new_with_nonce_ex<T: PrimInt>(nonce: &mut [T], heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
         #[cfg(fips)]
         {
             let rc = unsafe {
@@ -156,8 +158,8 @@ impl RNG {
             }
         }
         let ptr = nonce.as_mut_ptr() as *mut u8;
-        let size: u32 = size_of_val(nonce) as u32;
-        let mut rng: MaybeUninit<RNG> = MaybeUninit::uninit();
+        let size = crate::buffer_len_to_u32(size_of_val(nonce))?;
+        let mut wc_rng: MaybeUninit<sys::WC_RNG> = MaybeUninit::uninit();
         let heap = match heap {
             Some(heap) => heap,
             None => core::ptr::null_mut(),
@@ -167,10 +169,11 @@ impl RNG {
             None => sys::INVALID_DEVID,
         };
         let rc = unsafe {
-            sys::wc_InitRngNonce_ex(&mut (*rng.as_mut_ptr()).wc_rng, ptr, size, heap, dev_id)
+            sys::wc_InitRngNonce_ex(wc_rng.as_mut_ptr(), ptr, size, heap, dev_id)
         };
         if rc == 0 {
-            let rng = unsafe { rng.assume_init() };
+            let wc_rng = unsafe { wc_rng.assume_init() };
+            let rng = RNG {wc_rng};
             Ok(rng)
         } else {
             Err(rc)
@@ -242,16 +245,16 @@ impl RNG {
         let mut nonce_size = 0u32;
         if let Some(nonce) = nonce {
             nonce_ptr = nonce.as_ptr();
-            nonce_size = nonce.len() as u32;
+            nonce_size = crate::buffer_len_to_u32(nonce.len())?;
         }
-        let seed_a_size = seed_a.len() as u32;
+        let seed_a_size = crate::buffer_len_to_u32(seed_a.len())?;
         let mut seed_b_ptr = core::ptr::null();
         let mut seed_b_size = 0u32;
         if let Some(seed_b) = seed_b {
             seed_b_ptr = seed_b.as_ptr();
-            seed_b_size = seed_b.len() as u32;
+            seed_b_size = crate::buffer_len_to_u32(seed_b.len())?;
         }
-        let output_size = output.len() as u32;
+        let output_size = crate::buffer_len_to_u32(output.len())?;
         let heap = match heap {
             Some(heap) => heap,
             None => core::ptr::null_mut(),
@@ -295,7 +298,7 @@ impl RNG {
     /// ```
     #[cfg(random_hashdrbg)]
     pub fn test_seed(seed: &[u8]) -> Result<(), i32> {
-        let seed_size = seed.len() as u32;
+        let seed_size = crate::buffer_len_to_u32(seed.len())?;
         let rc = unsafe { sys::wc_RNG_TestSeed(seed.as_ptr(), seed_size) };
         if rc != 0 {
             return Err(rc);
@@ -336,9 +339,9 @@ impl RNG {
     ///
     /// A `Result` which is `Ok(())` on success or an `Err` with the wolfssl
     /// library return code on failure.
-    pub fn generate_block<T>(&mut self, buf: &mut [T]) -> Result<(), i32> {
+    pub fn generate_block<T: PrimInt>(&mut self, buf: &mut [T]) -> Result<(), i32> {
         let ptr = buf.as_mut_ptr() as *mut u8;
-        let size: u32 = size_of_val(buf) as u32;
+        let size = crate::buffer_len_to_u32(size_of_val(buf))?;
         let rc = unsafe { sys::wc_RNG_GenerateBlock(&mut self.wc_rng, ptr, size) };
         if rc == 0 {
             Ok(())
@@ -369,7 +372,7 @@ impl RNG {
     /// ```
     #[cfg(random_hashdrbg)]
     pub fn reseed(&mut self, seed: &[u8]) -> Result<(), i32> {
-        let seed_size = seed.len() as u32;
+        let seed_size = crate::buffer_len_to_u32(seed.len())?;
         let rc = unsafe {
             sys::wc_RNG_DRBG_Reseed(&mut self.wc_rng, seed.as_ptr(), seed_size)
         };
@@ -377,6 +380,40 @@ impl RNG {
             return Err(rc);
         }
         Ok(())
+    }
+}
+
+/// Implement `rand_core::TryRng` for `RNG`, allowing it to be used anywhere
+/// a standard Rust RNG is expected.
+///
+/// `Error` is set to `Infallible` so that the blanket impls for `Rng` and
+/// `CryptoRng` apply automatically. wolfSSL RNG failures cause a panic, which
+/// is consistent with the infallible contract.
+#[cfg(feature = "rand_core")]
+impl rand_core::TryRng for RNG {
+    type Error = core::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        rand_core::utils::next_word_via_fill(self)
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        rand_core::utils::next_word_via_fill(self)
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        self.generate_block(dest).expect("RNG failure");
+        Ok(())
+    }
+}
+
+/// Mark `RNG` as a cryptographically secure random number generator.
+#[cfg(feature = "rand_core")]
+impl rand_core::TryCryptoRng for RNG {}
+
+impl RNG {
+    fn zeroize(&mut self) {
+        unsafe { crate::zeroize_raw(&mut self.wc_rng); }
     }
 }
 
@@ -390,5 +427,6 @@ impl Drop for RNG {
     /// preventing memory leaks.
     fn drop(&mut self) {
         unsafe { sys::wc_FreeRng(&mut self.wc_rng); }
+        self.zeroize();
     }
 }

@@ -240,7 +240,11 @@ enum wolfSSL_ErrorCodes {
 
     SESSION_TICKET_NONCE_OVERFLOW = -517,  /* Session ticket nonce overflow */
 
-    WOLFSSL_LAST_E               = -517
+    EMPTY_RECORD_LIMIT_E         = -518,   /* Too many empty records received */
+
+    ECH_REQUIRED_E               = -519,   /* ECH offered but rejected by server */
+
+    WOLFSSL_LAST_E               = -519
 
     /* codes -1000 to -1999 are reserved for wolfCrypt. */
 };

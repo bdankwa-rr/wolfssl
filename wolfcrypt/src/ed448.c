@@ -152,7 +152,7 @@ static int ed448_hash(ed448_key* key, const byte* in, word32 inLen,
 {
     int ret;
 #ifndef WOLFSSL_ED448_PERSISTENT_SHA
-    wc_Shake sha[1];
+    WC_DECLARE_VAR(sha, wc_Shake, 1, key ? key->heap : NULL);
 #else
     wc_Shake *sha;
 #endif
@@ -165,10 +165,16 @@ static int ed448_hash(ed448_key* key, const byte* in, word32 inLen,
     sha = &key->sha;
     ret = ed448_hash_reset(key);
 #else
+    WC_ALLOC_VAR_EX(sha, wc_Shake, 1, key->heap, DYNAMIC_TYPE_HASHES,
+                    return MEMORY_E);
     ret = ed448_hash_init(key, sha);
 #endif
-    if (ret < 0)
+    if (ret < 0) {
+    #ifndef WOLFSSL_ED448_PERSISTENT_SHA
+        WC_FREE_VAR_EX(sha, key->heap, DYNAMIC_TYPE_HASHES);
+    #endif
         return ret;
+    }
 
     ret = ed448_hash_update(key, sha, in, inLen);
     if (ret == 0)
@@ -176,6 +182,7 @@ static int ed448_hash(ed448_key* key, const byte* in, word32 inLen,
 
 #ifndef WOLFSSL_ED448_PERSISTENT_SHA
     ed448_hash_free(key, sha);
+    WC_FREE_VAR_EX(sha, key->heap, DYNAMIC_TYPE_HASHES);
 #endif
 
     return ret;
@@ -358,6 +365,9 @@ int wc_ed448_sign_msg_ex(const byte* in, word32 inLen, byte* out,
 #ifdef WOLFSSL_EDDSA_CHECK_PRIV_ON_SIGN
     byte     orig_k[ED448_KEY_SIZE];
 #endif
+#ifndef WOLFSSL_ED448_PERSISTENT_SHA
+    WC_DECLARE_VAR(sha, wc_Shake, 1, key ? key->heap : NULL);
+#endif
 
     /* sanity check on arguments */
     if ((in == NULL) || (out == NULL) || (outLen == NULL) || (key == NULL) ||
@@ -397,8 +407,10 @@ int wc_ed448_sign_msg_ex(const byte* in, word32 inLen, byte* out,
 #ifdef WOLFSSL_ED448_PERSISTENT_SHA
         wc_Shake *sha = &key->sha;
 #else
-        wc_Shake sha[1];
-        ret = ed448_hash_init(key, sha);
+        WC_ALLOC_VAR_EX(sha, wc_Shake, 1, key->heap, DYNAMIC_TYPE_HASHES,
+                        ret = MEMORY_E);
+        if (ret == 0)
+            ret = ed448_hash_init(key, sha);
 #endif
         /* apply clamp */
         az[0]  &= 0xfc;
@@ -434,7 +446,6 @@ int wc_ed448_sign_msg_ex(const byte* in, word32 inLen, byte* out,
 #ifdef WOLFSSL_ED448_PERSISTENT_SHA
         wc_Shake *sha = &key->sha;
 #else
-        wc_Shake sha[1];
         ret = ed448_hash_init(key, sha);
 #endif
         if (ret == 0)
@@ -476,6 +487,9 @@ int wc_ed448_sign_msg_ex(const byte* in, word32 inLen, byte* out,
         ed448_hash_free(key, sha);
 #endif
     }
+#ifndef WOLFSSL_ED448_PERSISTENT_SHA
+    WC_FREE_VAR_EX(sha, key->heap, DYNAMIC_TYPE_HASHES);
+#endif
 
     if (ret == 0) {
         sc448_reduce(hram);
@@ -491,6 +505,7 @@ int wc_ed448_sign_msg_ex(const byte* in, word32 inLen, byte* out,
         }
         ret = ctMaskGT(c, 0) & SIG_VERIFY_E;
     }
+    ForceZero(orig_k, sizeof(orig_k));
 #endif
 
     ForceZero(az, sizeof(az));
@@ -807,7 +822,7 @@ int wc_ed448_verify_msg_ex(const byte* sig, word32 sigLen, const byte* msg,
 #ifdef WOLFSSL_ED448_PERSISTENT_SHA
     wc_Shake *sha;
 #else
-    wc_Shake sha[1];
+    WC_DECLARE_VAR(sha, wc_Shake, 1, key ? key->heap : NULL);
 #endif
 
     if (key == NULL)
@@ -822,9 +837,13 @@ int wc_ed448_verify_msg_ex(const byte* sig, word32 sigLen, const byte* msg,
 #ifdef WOLFSSL_ED448_PERSISTENT_SHA
     sha = &key->sha;
 #else
+    WC_ALLOC_VAR_EX(sha, wc_Shake, 1, key->heap, DYNAMIC_TYPE_HASHES,
+                    return MEMORY_E);
     ret = ed448_hash_init(key, sha);
-    if (ret < 0)
+    if (ret < 0) {
+        WC_FREE_VAR_EX(sha, key->heap, DYNAMIC_TYPE_HASHES);
         return ret;
+    }
 #endif
 
     ret = ed448_verify_msg_init_with_sha(sig, sigLen, key, sha,
@@ -836,6 +855,7 @@ int wc_ed448_verify_msg_ex(const byte* sig, word32 sigLen, const byte* msg,
 
 #ifndef WOLFSSL_ED448_PERSISTENT_SHA
     ed448_hash_free(key, sha);
+    WC_FREE_VAR_EX(sha, key->heap, DYNAMIC_TYPE_HASHES);
 #endif
 
     return ret;
@@ -982,6 +1002,41 @@ void wc_ed448_free(ed448_key* key)
     }
 }
 
+#ifndef WC_NO_CONSTRUCTORS
+ed448_key* wc_ed448_new(void* heap, int devId, int *result_code)
+{
+    int ret;
+    ed448_key* key = (ed448_key*)XMALLOC(sizeof(ed448_key), heap,
+                        DYNAMIC_TYPE_ED448);
+    if (key == NULL) {
+        ret = MEMORY_E;
+    }
+    else {
+        ret = wc_ed448_init_ex(key, heap, devId);
+        if (ret != 0) {
+            XFREE(key, heap, DYNAMIC_TYPE_ED448);
+            key = NULL;
+        }
+    }
+
+    if (result_code != NULL)
+        *result_code = ret;
+
+    return key;
+}
+
+int wc_ed448_delete(ed448_key* key, ed448_key** key_p) {
+    void* heap;
+    if (key == NULL)
+        return BAD_FUNC_ARG;
+    heap = key->heap;
+    wc_ed448_free(key);
+    XFREE(key, heap, DYNAMIC_TYPE_ED448);
+    if (key_p != NULL)
+        *key_p = NULL;
+    return 0;
+}
+#endif /* !WC_NO_CONSTRUCTORS */
 
 #ifdef HAVE_ED448_KEY_EXPORT
 
@@ -1247,6 +1302,10 @@ int wc_ed448_export_private_only(const ed448_key* key, byte* out, word32* outLen
         ret = BAD_FUNC_ARG;
     }
 
+    if ((ret == 0) && (!key->privKeySet)) {
+        ret = BAD_FUNC_ARG;
+    }
+
     if ((ret == 0) && (*outLen < ED448_KEY_SIZE)) {
         *outLen = ED448_KEY_SIZE;
         ret = BUFFER_E;
@@ -1276,6 +1335,10 @@ int wc_ed448_export_private(const ed448_key* key, byte* out, word32* outLen)
 
     /* sanity checks on arguments */
     if ((key == NULL) || (out == NULL) || (outLen == NULL)) {
+        ret = BAD_FUNC_ARG;
+    }
+
+    if ((ret == 0) && (!key->privKeySet)) {
         ret = BAD_FUNC_ARG;
     }
 

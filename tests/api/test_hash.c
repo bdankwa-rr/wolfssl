@@ -68,6 +68,12 @@ static const enum wc_HashType supportedHash[] = {
     WC_HASH_TYPE_SHA3_256,
     WC_HASH_TYPE_SHA3_384,
     WC_HASH_TYPE_SHA3_512,
+#if defined(WOLFSSL_SHAKE128)
+    WC_HASH_TYPE_SHAKE128,
+#endif
+#if defined(WOLFSSL_SHAKE256)
+    WC_HASH_TYPE_SHAKE256,
+#endif
 #endif
 #ifdef WOLFSSL_SM3
     WC_HASH_TYPE_SM3,
@@ -117,23 +123,23 @@ static const enum wc_HashType notCompiledHash[] = {
 #ifdef NO_MD4
     WC_HASH_TYPE_MD4,
 #endif
-#if !defined(HAVE_BLAKE2) && !defined(HAVE_BLAKE2S)
+#ifndef HAVE_BLAKE2B
     WC_HASH_TYPE_BLAKE2B,
 #endif
-#if !defined(HAVE_BLAKE2) && !defined(HAVE_BLAKE2B)
+#ifndef HAVE_BLAKE2S
     WC_HASH_TYPE_BLAKE2S,
 #endif
     WC_HASH_TYPE_NONE   /* Dummy value to ensure list is non-zero. */
 };
 static const int notCompiledHashLen = (sizeof(notCompiledHash) /
-                                       sizeof(enum wc_HashType)) - 1;
+                                       sizeof(notCompiledHash[0])) - 1;
 
 static const int notSupportedHash[] = {
     WC_HASH_TYPE_NONE,
     WC_HASH_TYPE_MAX + 1
 };
 static const int notSupportedHashLen = (sizeof(notSupportedHash) /
-                                        sizeof(enum wc_HashType));
+                                        sizeof(notSupportedHash[0]));
 
 static const enum wc_HashType sizeSupportedHash[] = {
 #if !defined(NO_MD5) && !defined(NO_SHA)
@@ -145,14 +151,22 @@ static const enum wc_HashType sizeSupportedHash[] = {
 #ifndef NO_MD4
     WC_HASH_TYPE_MD4,
 #endif
-#if defined(HAVE_BLAKE2) || defined(HAVE_BLAKE2S)
+#ifdef HAVE_BLAKE2B
     WC_HASH_TYPE_BLAKE2B,
+#endif
+#ifdef HAVE_BLAKE2S
     WC_HASH_TYPE_BLAKE2S,
+#endif
+#if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+    WC_HASH_TYPE_SHAKE128,
+#endif
+#if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+    WC_HASH_TYPE_SHAKE256,
 #endif
     WC_HASH_TYPE_NONE   /* Dummy value to ensure list is non-zero. */
 };
 static const int sizeSupportedHashLen = (sizeof(sizeSupportedHash) /
-                                         sizeof(enum wc_HashType)) - 1;
+                                         sizeof(sizeSupportedHash[0])) - 1;
 static const enum wc_HashType sizeNotCompiledHash[] = {
 #if defined(NO_MD5) || defined(NO_SHA)
     WC_HASH_TYPE_MD5_SHA,
@@ -163,22 +177,28 @@ static const enum wc_HashType sizeNotCompiledHash[] = {
 #ifdef NO_MD4
     WC_HASH_TYPE_MD4,
 #endif
-#if !defined(HAVE_BLAKE2) && !defined(HAVE_BLAKE2S)
+#ifndef HAVE_BLAKE2B
     WC_HASH_TYPE_BLAKE2B,
+#endif
+#ifndef HAVE_BLAKE2S
     WC_HASH_TYPE_BLAKE2S,
 #endif
+#if !defined(WOLFSSL_SHA3) || !defined(WOLFSSL_SHAKE128)
     WC_HASH_TYPE_SHAKE128,
+#endif
+#if !defined(WOLFSSL_SHA3) || !defined(WOLFSSL_SHAKE256)
     WC_HASH_TYPE_SHAKE256,
+#endif
     WC_HASH_TYPE_NONE   /* Dummy value to ensure list is non-zero. */
 };
 static const int sizeNotCompiledHashLen = (sizeof(sizeNotCompiledHash) /
-                                           sizeof(enum wc_HashType)) - 1;
+                                           sizeof(sizeNotCompiledHash[0])) - 1;
 static const int sizeNotSupportedHash[] = {
     WC_HASH_TYPE_NONE,
     WC_HASH_TYPE_MAX + 1
 };
 static const int sizeNotSupportedHashLen = (sizeof(sizeNotSupportedHash) /
-                                            sizeof(enum wc_HashType));
+                                            sizeof(sizeNotSupportedHash[0]));
 #endif /* NO_HASH_WRAPPER */
 
 int test_wc_HashInit(void)

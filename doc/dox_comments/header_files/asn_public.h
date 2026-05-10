@@ -2845,7 +2845,7 @@ int wc_Ed448PublicKeyDecode(const byte* input, word32* inOutIdx,
 
     \sa wc_Ed448PrivateKeyToDer
 */
-int wc_Ed448KeyToDer(ed448_key* key, byte* output, word32 inLen);
+int wc_Ed448KeyToDer(const ed448_key* key, byte* output, word32 inLen);
 
 /*!
     \ingroup Ed448
@@ -2868,7 +2868,7 @@ int wc_Ed448KeyToDer(ed448_key* key, byte* output, word32 inLen);
 
     \sa wc_Ed448PrivateKeyDecode
 */
-int wc_Ed448PrivateKeyToDer(ed448_key* key, byte* output,
+int wc_Ed448PrivateKeyToDer(const ed448_key* key, byte* output,
                              word32 inLen);
 
 /*!
@@ -2881,19 +2881,20 @@ int wc_Ed448PrivateKeyToDer(ed448_key* key, byte* output,
     \param key Ed448 key structure with public key
     \param output Buffer for DER encoded public key
     \param inLen Size of output buffer
+    \param withAlg 1 to include algorithm identifier, 0 for key data only
 
     _Example_
     \code
     ed448_key key;
     byte der[1024];
     int derSz = wc_Ed448PublicKeyToDer(&key, der,
-                                       sizeof(der));
+                                       sizeof(der), 1);
     \endcode
 
     \sa wc_Ed448PublicKeyDecode
 */
-int wc_Ed448PublicKeyToDer(ed448_key* key, byte* output,
-                            int inLen);
+int wc_Ed448PublicKeyToDer(const ed448_key* key, byte* output,
+                            word32 inLen, int withAlg);
 
 /*!
     \ingroup Curve448
@@ -3371,6 +3372,103 @@ int wc_GetSubjectPubKeyInfoDerFromCert(const byte* certDer,
                                        word32 certDerSz,
                                        byte* pubKeyDer,
                                        word32* pubKeyDerSz);
+
+/*!
+    \ingroup ASN
+
+    \brief Retrieves the subject name from a decoded certificate.
+
+    This function copies the subject name string from a DecodedCert
+    structure into the provided buffer. The string uses a one-line
+    distinguished name format with "/" delimiters
+    (e.g. "/C=US/O=Org/CN=example.com"). The output is NOT
+    NUL-terminated; the caller should append a NUL byte if needed.
+    If buf is NULL, the required buffer size is returned
+    in bufSz and LENGTH_ONLY_E is returned.
+
+    \param cert   Pointer to the DecodedCert (must have been parsed).
+    \param buf    Output buffer to receive the subject name string,
+                  or NULL to query the required size.
+    \param bufSz  Pointer to the buffer size. On input, the available
+                  buffer size. On output, the number of bytes written
+                  (excluding any NUL terminator) or the required size
+                  if buf is NULL.
+
+    \return 0 on success.
+    \return LENGTH_ONLY_E when buf is NULL (bufSz contains required size).
+    \return BAD_FUNC_ARG if cert or bufSz is NULL.
+    \return BUFFER_E if the provided buffer is too small.
+
+    \sa wc_GetDecodedCertIssuer
+    \sa wc_GetDecodedCertSerial
+    \sa wc_InitDecodedCert
+    \sa wc_ParseCert
+*/
+int wc_GetDecodedCertSubject(const struct DecodedCert* cert,
+                             char* buf, word32* bufSz);
+
+/*!
+    \ingroup ASN
+
+    \brief Retrieves the issuer name from a decoded certificate.
+
+    This function copies the issuer name string from a DecodedCert
+    structure into the provided buffer. The string uses a one-line
+    distinguished name format with "/" delimiters
+    (e.g. "/C=US/O=Org/CN=example.com"). The output is NOT
+    NUL-terminated; the caller should append a NUL byte if needed.
+    If buf is NULL, the required buffer size is returned
+    in bufSz and LENGTH_ONLY_E is returned.
+
+    \param cert   Pointer to the DecodedCert (must have been parsed).
+    \param buf    Output buffer to receive the issuer name string,
+                  or NULL to query the required size.
+    \param bufSz  Pointer to the buffer size. On input, the available
+                  buffer size. On output, the number of bytes written
+                  (excluding any NUL terminator) or the required size
+                  if buf is NULL.
+
+    \return 0 on success.
+    \return LENGTH_ONLY_E when buf is NULL (bufSz contains required size).
+    \return BAD_FUNC_ARG if cert or bufSz is NULL.
+    \return BUFFER_E if the provided buffer is too small.
+
+    \sa wc_GetDecodedCertSubject
+    \sa wc_GetDecodedCertSerial
+    \sa wc_InitDecodedCert
+    \sa wc_ParseCert
+*/
+int wc_GetDecodedCertIssuer(const struct DecodedCert* cert,
+                            char* buf, word32* bufSz);
+
+/*!
+    \ingroup ASN
+
+    \brief Retrieves the serial number from a decoded certificate.
+
+    This function copies the serial number bytes from a DecodedCert
+    structure into the provided buffer. If buf is NULL, the required
+    buffer size is returned in bufSz and LENGTH_ONLY_E is returned.
+
+    \param cert   Pointer to the DecodedCert (must have been parsed).
+    \param buf    Output buffer to receive the serial number bytes,
+                  or NULL to query the required size.
+    \param bufSz  Pointer to the buffer size. On input, the available
+                  buffer size. On output, the number of bytes written
+                  or the required size if buf is NULL.
+
+    \return 0 on success.
+    \return LENGTH_ONLY_E when buf is NULL (bufSz contains required size).
+    \return BAD_FUNC_ARG if cert or bufSz is NULL.
+    \return BUFFER_E if the provided buffer is too small.
+
+    \sa wc_GetDecodedCertSubject
+    \sa wc_GetDecodedCertIssuer
+    \sa wc_InitDecodedCert
+    \sa wc_ParseCert
+*/
+int wc_GetDecodedCertSerial(const struct DecodedCert* cert,
+                            byte* buf, word32* bufSz);
 
 /*!
     \ingroup ASN

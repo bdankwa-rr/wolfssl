@@ -1288,6 +1288,12 @@ enum {
     #define MAX_EARLY_DATA_SZ  4096
 #endif
 
+/* Anti-replay eviction keys off the ticket's session ID. */
+#if defined(WOLFSSL_EARLY_DATA) && defined(HAVE_SESSION_TICKET) && \
+    !defined(WOLFSSL_TICKET_HAVE_ID)
+    #define WOLFSSL_TICKET_HAVE_ID
+#endif
+
 
 #if !defined(NO_RSA) || !defined(NO_DH) || defined(HAVE_ECC)
     /* MySQL wants to be able to use 8192-bit numbers. */
@@ -1442,6 +1448,15 @@ enum {
  */
 #define AEAD_SM4_CCM_LIMIT                       w64From32(0, (1 << 10) - 1)
 
+#ifndef WOLFSSL_COOKIE_LEN
+/* Maximum size for a DTLS cookie */
+#define WOLFSSL_COOKIE_LEN 32
+#endif
+
+#if WOLFSSL_COOKIE_LEN > 255
+#error "WOLFSSL_COOKIE_LEN must be <= 255 per RFC 6347 (opaque<0..2^8-1>)"
+#endif
+
 #if defined(WOLFSSL_TLS13) || !defined(NO_PSK)
 
 #define TLS13_TICKET_NONCE_MAX_SZ 255
@@ -1569,7 +1584,7 @@ enum Misc {
     SEED_LEN     = RAN_LEN * 2, /* tls prf seed length    */
     ID_LEN       = 32,         /* session id length       */
     COOKIE_SECRET_SZ = 14,     /* dtls cookie secret size */
-    MAX_COOKIE_LEN = 32,       /* max dtls cookie size    */
+    MAX_COOKIE_LEN = WOLFSSL_COOKIE_LEN, /* max dtls cookie size */
     COOKIE_SZ    = 20,         /* use a 20 byte cookie    */
     SUITE_LEN    =  2,         /* cipher suite sz length  */
     ENUM_LEN     =  1,         /* always a byte           */
@@ -1767,9 +1782,9 @@ enum Misc {
 
     /* These values for falcon match what OQS has defined. */
     FALCON_LEVEL1_SA_MAJOR = 0xFE,
-    FALCON_LEVEL1_SA_MINOR = 0xAE,
+    FALCON_LEVEL1_SA_MINOR = 0xD7,
     FALCON_LEVEL5_SA_MAJOR = 0xFE,
-    FALCON_LEVEL5_SA_MINOR = 0xB1,
+    FALCON_LEVEL5_SA_MINOR = 0xDA,
 
     /* these values for MLDSA (Dilithium) correspond to what is proposed in the
      * IETF. */
@@ -2213,9 +2228,12 @@ WOLFSSL_LOCAL void FreeAsyncCtx(WOLFSSL* ssl, byte freeAsync);
 WOLFSSL_LOCAL void FreeKeyExchange(WOLFSSL* ssl);
 WOLFSSL_LOCAL void FreeSuites(WOLFSSL* ssl);
 WOLFSSL_LOCAL int  ProcessPeerCerts(WOLFSSL* ssl, byte* input, word32* inOutIdx, word32 totalSz);
-WOLFSSL_LOCAL int  MatchDomainName(const char* pattern, int len,
-                                   const char* str, word32 strLen,
-                                   unsigned int flags);
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define MatchDomainName wolfSSL_MatchDomainName
+#endif
+WOLFSSL_TEST_VIS int  MatchDomainName(const char* pattern, int len,
+                                      const char* str, word32 strLen,
+                                      unsigned int flags);
 #if !defined(NO_CERTS) && !defined(NO_ASN)
 WOLFSSL_LOCAL int  CheckForAltNames(DecodedCert* dCert, const char* domain,
                                     word32 domainLen, int* checkCN,
@@ -2647,6 +2665,14 @@ struct WOLFSSL_CERT_MANAGER {
 ||  defined(HAVE_CERTIFICATE_STATUS_REQUEST_V2)
     byte            ocspMustStaple:1;      /* server must respond with staple */
 #endif
+    /* Tracks which resources were successfully initialized so that
+     * DoCertManagerFree can dispose of them safely even when construction
+     * fails partway through. */
+    WC_BITFIELD     caLockInit:1;          /* caLock has been initialized */
+#ifdef WOLFSSL_TRUST_PEER_CERT
+    WC_BITFIELD     tpLockInit:1;          /* tpLock has been initialized */
+#endif
+    WC_BITFIELD     refInit:1;             /* ref has been initialized */
 
 #ifndef NO_RSA
     short           minRsaKeySz;         /* minimum allowed RSA key size */
@@ -2730,6 +2756,7 @@ WOLFSSL_LOCAL void CleanupStoreCtxCallback(WOLFSSL_X509_STORE_CTX* store,
 #endif /* !defined(NO_WOLFSSL_CLIENT) || !defined(WOLFSSL_NO_CLIENT_AUTH) */
 WOLFSSL_LOCAL int X509StoreLoadCertBuffer(WOLFSSL_X509_STORE *str,
                                         byte *buf, word32 bufLen, int type);
+WOLFSSL_LOCAL int X509StorePushCertsToCM(WOLFSSL_X509_STORE* store);
 #endif /* !defined NO_CERTS */
 
 /* wolfSSL Sock Addr */
@@ -2819,7 +2846,7 @@ struct WOLFSSL_BIO {
     } num;
     int          eof;           /* eof flag */
     int          flags;
-    byte         type;          /* method type */
+    int          type;          /* method type */
     byte         init:1;        /* bio has been initialized */
     byte         shutdown:1;    /* close flag */
     byte         connected:1;   /* connected state, for datagram BIOs -- as for
@@ -2957,6 +2984,7 @@ typedef struct Options Options;
 #define TLSXT_SERVER_CERTIFICATE         0x0014 /* RFC8446 */
 #define TLSXT_ENCRYPT_THEN_MAC           0x0016 /* RFC 7366 */
 #define TLSXT_EXTENDED_MASTER_SECRET     0x0017 /* HELLO_EXT_EXTMS */
+#define TLSXT_CERT_WITH_EXTERN_PSK       0x0021 /* RFC 8773bis */
 #define TLSXT_SESSION_TICKET             0x0023
 #define TLSXT_PRE_SHARED_KEY             0x0029
 #define TLSXT_EARLY_DATA                 0x002a
@@ -3009,11 +3037,12 @@ typedef enum {
     TLSX_EARLY_DATA                 = TLSXT_EARLY_DATA,
     #endif
     TLSX_SUPPORTED_VERSIONS         = TLSXT_SUPPORTED_VERSIONS,
-    #ifdef WOLFSSL_SEND_HRR_COOKIE
     TLSX_COOKIE                     = TLSXT_COOKIE,
-    #endif
     #if defined(HAVE_SESSION_TICKET) || !defined(NO_PSK)
     TLSX_PSK_KEY_EXCHANGE_MODES     = TLSXT_PSK_KEY_EXCHANGE_MODES,
+    #if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+    TLSX_CERT_WITH_EXTERN_PSK       = TLSXT_CERT_WITH_EXTERN_PSK,
+    #endif
     #endif
     #if !defined(NO_CERTS) && !defined(WOLFSSL_NO_CA_NAMES)
     TLSX_CERTIFICATE_AUTHORITIES    = TLSXT_CERTIFICATE_AUTHORITIES,
@@ -3131,9 +3160,9 @@ typedef struct WOLFSSL_ECH {
     byte* outerClientPayload;
     byte* confBuf;
     EchCipherSuite cipherSuite;
-    word16 aadLen;
+    word32 aadLen;
+    word32 innerClientHelloLen;
     word16 paddingLen;
-    word16 innerClientHelloLen;
     word16 kemId;
     word16 encLen;
     EchState state;
@@ -3142,6 +3171,7 @@ typedef struct WOLFSSL_ECH {
     byte configId;
     byte enc[HPKE_Npk_MAX];
     byte innerCount;
+    byte writeEncoded;
 } WOLFSSL_ECH;
 
 WOLFSSL_LOCAL int EchConfigGetSupportedCipherSuite(WOLFSSL_EchConfig* config);
@@ -3159,6 +3189,9 @@ WOLFSSL_LOCAL int GetEchConfigsEx(WOLFSSL_EchConfig* configs,
     byte* output, word32* outputLen);
 
 WOLFSSL_LOCAL void FreeEchConfigs(WOLFSSL_EchConfig* configs, void* heap);
+
+WOLFSSL_LOCAL int SetRetryConfigs(WOLFSSL* ssl, const byte* echConfigs,
+    word32 echConfigsLen);
 #endif
 
 struct TLSX {
@@ -3179,9 +3212,13 @@ WOLFSSL_LOCAL int   TLSX_SupportExtensions(WOLFSSL* ssl);
 WOLFSSL_LOCAL int   TLSX_PopulateExtensions(WOLFSSL* ssl, byte isRequest);
 
 #if defined(WOLFSSL_TLS13) || !defined(NO_WOLFSSL_CLIENT)
-WOLFSSL_LOCAL int   TLSX_GetRequestSize(WOLFSSL* ssl, byte msgType,
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define TLSX_GetRequestSize wolfSSL_TLSX_GetRequestSize
+    #define TLSX_WriteRequest   wolfSSL_TLSX_WriteRequest
+#endif
+WOLFSSL_TEST_VIS int   TLSX_GetRequestSize(WOLFSSL* ssl, byte msgType,
                                          word32* pLength);
-WOLFSSL_LOCAL int   TLSX_WriteRequest(WOLFSSL* ssl, byte* output,
+WOLFSSL_TEST_VIS int   TLSX_WriteRequest(WOLFSSL* ssl, byte* output,
                                        byte msgType, word32* pOffset);
 #endif
 
@@ -3198,7 +3235,10 @@ WOLFSSL_LOCAL int   TLSX_ParseVersion(WOLFSSL* ssl, const byte* input,
 WOLFSSL_LOCAL int TLSX_SupportedVersions_Parse(const WOLFSSL* ssl,
         const byte* input, word16 length, byte msgType, ProtocolVersion* pv,
         Options* opts, TLSX** exts);
-WOLFSSL_LOCAL int   TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length,
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define TLSX_Parse wolfSSL_TLSX_Parse
+#endif
+WOLFSSL_TEST_VIS int TLSX_Parse(WOLFSSL* ssl, const byte* input, word16 length,
                                byte msgType, Suites *suites);
 WOLFSSL_LOCAL int TLSX_Push(TLSX** list, TLSX_Type type,
                             const void* data, void* heap);
@@ -3475,6 +3515,24 @@ WOLFSSL_LOCAL int TLSX_AddEmptyRenegotiationInfo(TLSX** extensions, void* heap);
 #ifndef MAX_TICKET_PEER_CERT_SZ
 #define MAX_TICKET_PEER_CERT_SZ 2048
 #endif
+#if defined(HAVE_SNI) || defined(HAVE_ALPN)
+/* Hash algorithm used for SNI/ALPN binding in session tickets.
+ * Pick the best available at compile time. */
+#ifndef TICKET_BINDING_HASH_TYPE
+    #if !defined(NO_SHA256)
+        #define TICKET_BINDING_HASH_TYPE WC_HASH_TYPE_SHA256
+        #define TICKET_BINDING_HASH_SZ   WC_SHA256_DIGEST_SIZE
+    #elif defined(WOLFSSL_SHA384)
+        #define TICKET_BINDING_HASH_TYPE WC_HASH_TYPE_SHA384
+        #define TICKET_BINDING_HASH_SZ   WC_SHA384_DIGEST_SIZE
+    #elif !defined(NO_SHA)
+        #define TICKET_BINDING_HASH_TYPE WC_HASH_TYPE_SHA
+        #define TICKET_BINDING_HASH_SZ   WC_SHA_DIGEST_SIZE
+    #else
+        #error "No hash algorithm available for ticket binding"
+    #endif
+#endif
+#endif
 
 /* Our ticket format. All members need to be a byte or array of byte to
  * avoid alignment issues */
@@ -3496,6 +3554,14 @@ typedef struct InternalTicket {
 #endif
 #ifdef WOLFSSL_TICKET_HAVE_ID
     byte            id[ID_LEN];
+#endif
+#ifdef HAVE_SNI
+    byte            sniHash[TICKET_BINDING_HASH_SZ]; /* digest of server name
+                                                      * at ticket issue */
+#endif
+#ifdef HAVE_ALPN
+    byte            alpnHash[TICKET_BINDING_HASH_SZ]; /* digest of negotiated
+                                                       * ALPN at issue */
 #endif
 #ifdef OPENSSL_EXTRA
     byte            sessionCtxSz;          /* sessionCtx length        */
@@ -3587,11 +3653,16 @@ typedef struct TicketEncCbCtx {
 
 #endif /* !WOLFSSL_NO_DEF_TICKET_ENC_CB && !NO_WOLFSSL_SERVER */
 
-WOLFSSL_LOCAL int  TLSX_UseSessionTicket(TLSX** extensions,
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define TLSX_UseSessionTicket     wolfSSL_TLSX_UseSessionTicket
+    #define TLSX_SessionTicket_Create wolfSSL_TLSX_SessionTicket_Create
+    #define TLSX_SessionTicket_Free   wolfSSL_TLSX_SessionTicket_Free
+#endif
+WOLFSSL_TEST_VIS int  TLSX_UseSessionTicket(TLSX** extensions,
                                              SessionTicket* ticket, void* heap);
-WOLFSSL_LOCAL SessionTicket* TLSX_SessionTicket_Create(word32 lifetime,
+WOLFSSL_TEST_VIS SessionTicket* TLSX_SessionTicket_Create(word32 lifetime,
                                            byte* data, word16 size, void* heap);
-WOLFSSL_LOCAL void TLSX_SessionTicket_Free(SessionTicket* ticket, void* heap);
+WOLFSSL_TEST_VIS void TLSX_SessionTicket_Free(SessionTicket* ticket, void* heap);
 
 #endif /* HAVE_SESSION_TICKET */
 
@@ -3737,6 +3808,9 @@ WOLFSSL_LOCAL int TLSX_PreSharedKey_Use(TLSX** extensions, const byte* identity,
                                         void* heap);
 WOLFSSL_LOCAL int TLSX_PreSharedKey_Parse_ClientHello(TLSX** extensions,
                                   const byte* input, word16 length, void* heap);
+#if defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && defined(WOLFSSL_TLS13)
+WOLFSSL_LOCAL int TLSX_CertWithExternPsk_Use(WOLFSSL* ssl);
+#endif
 
 /* The possible Pre-Shared Key key exchange modes. */
 enum PskKeyExchangeMode {
@@ -3935,6 +4009,9 @@ struct WOLFSSL_CTX {
     byte        noPskDheKe:1;     /* Don't use (EC)DHE with PSK */
 #ifdef HAVE_SUPPORTED_CURVES
     byte        onlyPskDheKe:1;   /* Only use (EC)DHE with PSK */
+#endif
+#if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+    byte        certWithExternPsk:1; /* Use tls_cert_with_extern_psk extension */
 #endif
 #endif
 #endif /* WOLFSSL_TLS13 */
@@ -4727,6 +4804,12 @@ struct WOLFSSL_SESSION {
     byte*              ticket;
     word16             ticketLen;
     word16             ticketLenAlloc;    /* is dynamic */
+#ifdef HAVE_SNI
+    byte               sniHash[TICKET_BINDING_HASH_SZ];  /* SNI at issue */
+#endif
+#ifdef HAVE_ALPN
+    byte               alpnHash[TICKET_BINDING_HASH_SZ]; /* ALPN at issue */
+#endif
 #endif
 
 #ifdef SESSION_CERTS
@@ -5062,6 +5145,9 @@ struct Options {
 #ifdef HAVE_SUPPORTED_CURVES
     word16            onlyPskDheKe:1;     /* Only use (EC)DHE with PSK */
 #endif
+#if defined(WOLFSSL_CERT_WITH_EXTERN_PSK)
+    word16            certWithExternPsk:1; /* Cert auth with external PSK */
+#endif
 #endif
     word16            partialWrite:1;     /* only one msg per write call */
     word16            quietShutdown:1;    /* don't send close notify */
@@ -5162,7 +5248,9 @@ struct Options {
 #endif /* WOLFSSL_DTLS_CID */
 #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
     word16            echAccepted:1;
-    byte              disableECH:1;           /* Did the user disable ech */
+    word16            disableECH:1;             /* Did the user disable ech */
+    word16            echProcessingInner:1;     /* Processing the inner hello */
+    word16            echRetryConfigsAccepted:1;
 #endif
 #ifdef WOLFSSL_SEND_HRR_COOKIE
     word16            cookieGood:1;
@@ -5218,6 +5306,7 @@ struct Options {
     byte            asyncState;         /* sub-state for enum asyncState */
     byte            buildMsgState;      /* sub-state for enum buildMsgState */
     byte            alertCount;         /* detect warning dos attempt */
+    byte            emptyRecordCount;   /* detect empty record dos attempt */
 #ifdef WOLFSSL_MULTICAST
     word16          mcastID;            /* Multicast group ID */
 #endif
@@ -6481,6 +6570,13 @@ struct WOLFSSL {
 #endif /* WOLFSSL_QUIC */
 #if defined(WOLFSSL_TLS13) && defined(HAVE_ECH)
     WOLFSSL_EchConfig* echConfigs;
+    WOLFSSL_EchConfig* echRetryConfigs;
+#endif
+#if defined(WOLFSSL_TLS13) && defined(HAVE_ECH) && defined(WOLFSSL_TEST_ECH)
+    /* Test-only hook: called on the client before ECH encryption, after the
+     * inner ClientHello body is fully constructed. The callback may modify
+     * innerCh in-place (length stays the same). */
+    int (*echInnerHelloCb)(byte* innerCh, word32 innerChLen);
 #endif
 
 #if defined(WOLFSSL_SNIFFER) && defined(WOLFSSL_SNIFFER_KEYLOGFILE)
@@ -6720,6 +6816,9 @@ WOLFSSL_LOCAL int DoClientTicket_ex(const WOLFSSL* ssl, PreSharedKey* psk,
 #endif
 
 WOLFSSL_LOCAL int DoClientTicket(WOLFSSL* ssl, const byte* input, word32 len);
+#if defined(HAVE_SNI) || defined(HAVE_ALPN)
+WOLFSSL_LOCAL int VerifyTicketBinding(WOLFSSL* ssl);
+#endif
 #endif /* HAVE_SESSION_TICKET */
 WOLFSSL_LOCAL int SendData(WOLFSSL* ssl, const void* data, size_t sz);
 #ifdef WOLFSSL_THREADED_CRYPT
@@ -7338,7 +7437,7 @@ WOLFSSL_LOCAL void crypto_ex_cb_free_data(void *obj, CRYPTO_EX_cb_ctx* cb_ctx,
         WOLFSSL_CRYPTO_EX_DATA* ex_data);
 WOLFSSL_LOCAL int crypto_ex_cb_dup_data(const WOLFSSL_CRYPTO_EX_DATA *in,
         WOLFSSL_CRYPTO_EX_DATA *out, CRYPTO_EX_cb_ctx* cb_ctx);
-WOLFSSL_LOCAL int wolfssl_get_ex_new_index(int class_index, long ctx_l,
+WOLFSSL_LOCAL int wolfssl_local_get_ex_new_index(int class_index, long ctx_l,
         void* ctx_ptr, WOLFSSL_CRYPTO_EX_new* new_func,
         WOLFSSL_CRYPTO_EX_dup* dup_func, WOLFSSL_CRYPTO_EX_free* free_func);
 #endif /* HAVE_EX_DATA_CRYPTO */
@@ -7430,6 +7529,15 @@ WOLFSSL_LOCAL int pkcs8_encrypt(WOLFSSL_EVP_PKEY* pkey,
         const WOLFSSL_EVP_CIPHER* enc, char* passwd, int passwdSz, byte* key,
         word32* keySz);
 #endif /* OPENSSL_EXTRA || OPENSSL_EXTRA_X509_SMALL */
+
+#if (defined(OPENSSL_EXTRA) || defined(OPENSSL_ALL)) && !defined(NO_BIO)
+WOLFSSL_LOCAL int wolfSSL_PEM_X509_X509_CRL_X509_PKEY_read_bio(
+        WOLFSSL_BIO* bio, wc_pem_password_cb* cb, WOLFSSL_X509** x509,
+        WOLFSSL_X509_CRL** crl, WOLFSSL_X509_PKEY** x_pkey);
+#endif
+#if defined(OPENSSL_EXTRA) || defined(OPENSSL_ALL)
+WOLFSSL_LOCAL void wolfSSL_X509_PKEY_free(WOLFSSL_X509_PKEY* xPkey);
+#endif
 
 WOLFSSL_LOCAL void wolfssl_local_MaybeCheckAlertOnErr(WOLFSSL* ssl, int err);
 

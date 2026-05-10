@@ -67,8 +67,14 @@ that can be serialized and deserialized in a cross-platform way.
 #ifdef HAVE_ED448
     #include <wolfssl/wolfcrypt/ed448.h>
 #endif
-#ifdef HAVE_SPHINCS
-    #include <wolfssl/wolfcrypt/sphincs.h>
+#ifdef WOLFSSL_HAVE_SLHDSA
+    #include <wolfssl/wolfcrypt/wc_slhdsa.h>
+#endif
+#ifdef WOLFSSL_HAVE_LMS
+    #include <wolfssl/wolfcrypt/wc_lms.h>
+#endif
+#ifdef WOLFSSL_HAVE_XMSS
+    #include <wolfssl/wolfcrypt/wc_xmss.h>
 #endif
 #ifdef HAVE_FALCON
     #include <wolfssl/wolfcrypt/falcon.h>
@@ -1311,6 +1317,10 @@ enum Misc_ASN {
     MAX_CERTPOL_NB      = CTC_MAX_CERTPOL_NB,/* Max number of Cert Policy */
     MAX_CERTPOL_SZ      = CTC_MAX_CERTPOL_SZ,
 #endif
+#ifdef WOLFSSL_ACME_OID
+    MAX_ACMEID_SZ       = 19 + WC_SHA256_DIGEST_SIZE, /* Max encoded
+                                                         acmeIdentifier size */
+#endif
     OCSP_NONCE_EXT_SZ   = 35,      /* OCSP Nonce Extension size */
     MAX_OCSP_EXT_SZ     = 58,      /* Max OCSP Extension length */
     MAX_OCSP_NONCE_SZ   = 16,      /* OCSP Nonce size           */
@@ -1538,7 +1548,8 @@ struct SignatureCtx {
 #endif
 #if defined(HAVE_ECC) || defined(HAVE_ED25519) || defined(HAVE_ED448) || \
     !defined(NO_DSA) || defined(HAVE_DILITHIUM) || defined(HAVE_FALCON) || \
-    defined(HAVE_SPHINCS)
+    defined(WOLFSSL_HAVE_SLHDSA) || defined(WOLFSSL_HAVE_LMS) || \
+    defined(WOLFSSL_HAVE_XMSS)
     int verify;
 #endif
     union {
@@ -1591,11 +1602,25 @@ struct SignatureCtx {
         struct dilithium_key* dilithium;
         #endif
     #endif
-    #ifdef HAVE_SPHINCS
+    #ifdef WOLFSSL_HAVE_SLHDSA
         #ifdef WOLFSSL_NO_MALLOC
-        struct sphincs_key  sphincs[1];
+        SlhDsaKey  slhdsa[1];
         #else
-        struct sphincs_key* sphincs;
+        SlhDsaKey* slhdsa;
+        #endif
+    #endif
+    #ifdef WOLFSSL_HAVE_LMS
+        #ifdef WOLFSSL_NO_MALLOC
+        LmsKey  lms[1];
+        #else
+        LmsKey* lms;
+        #endif
+    #endif
+    #ifdef WOLFSSL_HAVE_XMSS
+        #ifdef WOLFSSL_NO_MALLOC
+        XmssKey  xmss[1];
+        #else
+        XmssKey* xmss;
         #endif
     #endif
     #ifndef WOLFSSL_NO_MALLOC
@@ -1760,6 +1785,13 @@ struct DecodedCert {
 #ifndef IGNORE_NAME_CONSTRAINTS
     DNS_entry* altEmailNames;        /* alt names list of RFC822 entries */
     DNS_entry* altDirNames;          /* alt names list of DIR entries    */
+    /* Raw OtherName GeneralName encodings (OID || [0] EXPLICIT value)
+     * for any otherName SAN seen on this certificate. Used internally by
+     * ConfirmNameConstraints() for byte-exact matching against the
+     * issuing CA's nameConstraints subtrees (RFC 5280 4.2.1.10). Kept
+     * separate from altNames so OpenSSL-compat APIs that iterate
+     * altNames see exactly the entries the SAN extension carries. */
+    DNS_entry* altOtherNamesRaw;
     Base_entry* permittedNames;      /* Permitted name bases             */
     Base_entry* excludedNames;       /* Excluded name bases              */
 #endif /* IGNORE_NAME_CONSTRAINTS */
@@ -1852,13 +1884,16 @@ struct DecodedCert {
 #endif /* WOLFSSL_SUBJ_INFO_ACC */
 
 #if defined(HAVE_ECC) || defined(HAVE_ED25519) || defined(HAVE_ED448) || \
-    defined(HAVE_DILITHIUM) || defined(HAVE_FALCON) || defined(HAVE_SPHINCS)
+    defined(HAVE_DILITHIUM) || defined(HAVE_FALCON) || \
+    defined(WOLFSSL_HAVE_SLHDSA) || defined(WOLFSSL_HAVE_LMS) || \
+    defined(WOLFSSL_HAVE_XMSS)
     word32  pkCurveOID;           /* Public Key's curve OID */
     #ifdef WOLFSSL_CUSTOM_CURVES
         int  pkCurveSize;         /* Public Key's curve size */
     #endif
 #endif /* HAVE_ECC || HAVE_ED25519 || HAVE_ED448 || HAVE_DILITHIUM ||
-        * HAVE_FALCON || HAVE_SPHINCS */
+        * HAVE_FALCON || WOLFSSL_HAVE_SLHDSA || WOLFSSL_HAVE_LMS ||
+        * WOLFSSL_HAVE_XMSS */
     const byte* beforeDate;
     int     beforeDateLen;
     const byte* afterDate;
@@ -2062,7 +2097,23 @@ struct DecodedCert {
     WC_BITFIELD extSubjAltNameCrit:1;
     WC_BITFIELD extAuthKeyIdCrit:1;
 #ifndef IGNORE_NAME_CONSTRAINTS
+    /*!
+     * \brief Set when the certificate's nameConstraints extension was
+     *        present and marked critical.
+     */
     WC_BITFIELD extNameConstraintCrit:1;
+    /*!
+     * \brief Set when decoding the nameConstraints extension encountered
+     *        at least one permittedSubtrees or excludedSubtrees entry whose
+     *        GeneralName form (e.g. registeredID, x400Address,
+     *        ediPartyName) wolfSSL does not enforce.
+     *
+     * During verification, ConfirmNameConstraints() implements the RFC
+     * 5280 4.2.1.10 fail-closed requirement: when both this flag and
+     * extNameConstraintCrit are set, the chain is rejected rather than
+     * the unsupported constraint form being silently ignored.
+     */
+    WC_BITFIELD extNameConstraintHasUnsupported:1;
 #endif
     WC_BITFIELD extSubjKeyIdCrit:1;
     WC_BITFIELD extKeyUsageCrit:1;
@@ -2107,7 +2158,13 @@ struct DecodedCert {
     WC_BITFIELD extAltSigAlgCrit:1;
     WC_BITFIELD extAltSigValCrit:1;
 #endif /* WOLFSSL_DUAL_ALG_CERTS */
-
+#ifdef WOLFSSL_ACME_OID
+    /* id-pe-acmeIdentifier (TLS-ALPN-01 challenge cert) */
+    byte acmeIdentifier[WC_SHA256_DIGEST_SIZE];
+    int  acmeIdentifierSz;
+    WC_BITFIELD extAcmeIdentifierSet:1;
+    WC_BITFIELD extAcmeIdentifierCrit:1;
+#endif /* WOLFSSL_ACME_OID */
     WOLFSSL_AIA_ENTRY extAuthInfoList[WOLFSSL_MAX_AIA_ENTRIES];
     WC_BITFIELD extAuthInfoListSz:7;
     WC_BITFIELD extAuthInfoListOverflow:1;
@@ -2130,6 +2187,25 @@ struct Signer {
     byte    extKeyUsage;
     word16  maxPathLen;
     WC_BITFIELD selfSigned:1;
+#ifndef IGNORE_NAME_CONSTRAINTS
+    /*!
+     * \brief Mirrors DecodedCert::extNameConstraintCrit and
+     *        DecodedCert::extNameConstraintHasUnsupported so the
+     *        nameConstraints state survives onto the CA Signer and is
+     *        available during chain verification.
+     *
+     * ConfirmNameConstraints() uses these flags to implement the RFC 5280
+     * 4.2.1.10 fail-closed requirement: when extNameConstraintCrit is set
+     * and extNameConstraintHasUnsupported is also set, verification fails
+     * rather than the unsupported constraint form being silently ignored.
+     *
+     * Co-located with selfSigned to share its bitfield storage word and
+     * avoid growing sizeof(Signer), which is load-bearing for
+     * PERSIST_CERT_CACHE.
+     */
+    WC_BITFIELD extNameConstraintCrit:1;
+    WC_BITFIELD extNameConstraintHasUnsupported:1;
+#endif
     const byte* publicKey;
     int     nameLen;
     const char*
@@ -2452,6 +2528,7 @@ WOLFSSL_LOCAL int GetFormattedTime_ex(void* currTime, byte* buf, word32 len, byt
 WOLFSSL_LOCAL int ExtractDate(const unsigned char* date, unsigned char format,
                                 wolfssl_tm* certTime, int* idx, int len);
 WOLFSSL_LOCAL int DateGreaterThan(const struct tm* a, const struct tm* b);
+WOLFSSL_LOCAL int ValidateGmtime(struct tm* inTime);
 WOLFSSL_LOCAL int wc_ValidateDate(const byte* date, byte format, int dateType,
                                   int len);
 #ifndef NO_ASN_TIME
@@ -2680,12 +2757,18 @@ enum cert_enums {
     ML_DSA_LEVEL2_KEY        = 21,
     ML_DSA_LEVEL3_KEY        = 22,
     ML_DSA_LEVEL5_KEY        = 23,
-    SPHINCS_FAST_LEVEL1_KEY  = 24,
-    SPHINCS_FAST_LEVEL3_KEY  = 25,
-    SPHINCS_FAST_LEVEL5_KEY  = 26,
-    SPHINCS_SMALL_LEVEL1_KEY = 27,
-    SPHINCS_SMALL_LEVEL3_KEY = 28,
-    SPHINCS_SMALL_LEVEL5_KEY = 29
+    SLH_DSA_SHA2_128S_KEY    = 24,
+    SLH_DSA_SHA2_128F_KEY    = 25,
+    SLH_DSA_SHA2_192S_KEY    = 26,
+    SLH_DSA_SHA2_192F_KEY    = 27,
+    SLH_DSA_SHA2_256S_KEY    = 28,
+    SLH_DSA_SHA2_256F_KEY    = 29,
+    SLH_DSA_SHAKE_128S_KEY   = 30,
+    SLH_DSA_SHAKE_128F_KEY   = 31,
+    SLH_DSA_SHAKE_192S_KEY   = 32,
+    SLH_DSA_SHAKE_192F_KEY   = 33,
+    SLH_DSA_SHAKE_256S_KEY   = 34,
+    SLH_DSA_SHAKE_256F_KEY   = 35
 };
 
 #endif /* WOLFSSL_CERT_GEN */
@@ -3123,7 +3206,7 @@ WOLFSSL_TEST_VIS int  wolfssl_local_MatchIpSubnet(const byte* ip, int ipSz,
     || (defined(HAVE_CURVE25519) && defined(HAVE_CURVE25519_KEY_IMPORT)) \
     || (defined(HAVE_ED448) && defined(HAVE_ED448_KEY_IMPORT)) \
     || (defined(HAVE_CURVE448) && defined(HAVE_CURVE448_KEY_IMPORT)) \
-    || defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || defined(HAVE_SPHINCS))
+    || defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || defined(WOLFSSL_HAVE_SLHDSA))
 WOLFSSL_LOCAL int DecodeAsymKey_Assign(const byte* input, word32* inOutIdx,
     word32 inSz, const byte** seed, word32* seedLen, const byte** privKey,
     word32* privKeyLen, const byte** pubKey, word32* pubKeyLen,
@@ -3138,6 +3221,16 @@ WOLFSSL_LOCAL int DecodeAsymKey(const byte* input, word32* inOutIdx,
 WOLFSSL_TEST_VIS int SetAsymKeyDer(const byte* privKey, word32 privKeyLen,
     const byte* pubKey, word32 pubKeyLen, byte* output, word32 outLen,
     int keyType);
+#endif
+
+#ifdef WOLFSSL_HAVE_SLHDSA
+/* SLH-DSA OID mapping helpers shared with x509.c, ssl.c, wc_slhdsa.c, etc.
+ * All four are backed by a single static map in asn.c so the per-variant
+ * gating (WOLFSSL_SLHDSA_PARAM_NO_*) lives in one place. */
+WOLFSSL_LOCAL int wc_SlhDsaOidToParam(int oid);
+WOLFSSL_LOCAL int wc_SlhDsaOidToCertType(int oid);
+WOLFSSL_LOCAL int wc_IsSlhDsaOid(int oid);
+WOLFSSL_LOCAL int wc_SlhDsaParamToOid(enum SlhDsaParam param);
 #endif
 
 #endif /* !NO_ASN */

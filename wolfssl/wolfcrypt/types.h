@@ -1370,7 +1370,7 @@ enum {
     DYNAMIC_TYPE_FALCON       = 95,
     DYNAMIC_TYPE_SESSION      = 96,
     DYNAMIC_TYPE_DILITHIUM    = 97,
-    DYNAMIC_TYPE_SPHINCS      = 98,
+    DYNAMIC_TYPE_SPHINCS      = 98, /* deprecated: kept for ABI compat */
     DYNAMIC_TYPE_SM4_BUFFER   = 99,
     DYNAMIC_TYPE_DEBUG_TAG    = 100,
     DYNAMIC_TYPE_LMS          = 101,
@@ -1381,6 +1381,7 @@ enum {
     DYNAMIC_TYPE_SHA          = 106,
     DYNAMIC_TYPE_SLHDSA       = 107,
     DYNAMIC_TYPE_OCSP_RESPONSE = 108,
+    DYNAMIC_TYPE_XMSS         = 109,
     DYNAMIC_TYPE_SNIFFER_SERVER       = 1000,
     DYNAMIC_TYPE_SNIFFER_SESSION      = 1001,
     DYNAMIC_TYPE_SNIFFER_PB           = 1002,
@@ -1424,7 +1425,10 @@ enum wc_AlgoType {
     WC_ALGO_TYPE_KDF = 9,
     WC_ALGO_TYPE_COPY = 10,
     WC_ALGO_TYPE_FREE = 11,
-    WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_FREE
+    WC_ALGO_TYPE_SETKEY = 12,
+    WC_ALGO_TYPE_EXPORT_KEY = 13,
+    WC_ALGO_TYPE_SHE = 14,
+    WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_SHE
 };
 
 /* KDF types */
@@ -1566,6 +1570,18 @@ enum wc_PkType {
     WC_PK_TYPE_RSA_PKCS = 25,
     WC_PK_TYPE_RSA_PSS = 26,
     WC_PK_TYPE_RSA_OAEP = 27,
+    WC_PK_TYPE_EC_GET_SIZE = 28,
+    WC_PK_TYPE_EC_GET_SIG_SIZE = 29,
+    #undef _WC_PK_TYPE_MAX
+    #define _WC_PK_TYPE_MAX WC_PK_TYPE_EC_GET_SIG_SIZE
+#if defined(WOLFSSL_HAVE_LMS) || defined(WOLFSSL_HAVE_XMSS)
+    WC_PK_TYPE_PQC_STATEFUL_SIG_KEYGEN    = 30,
+    WC_PK_TYPE_PQC_STATEFUL_SIG_SIGN      = 31,
+    WC_PK_TYPE_PQC_STATEFUL_SIG_VERIFY    = 32,
+    WC_PK_TYPE_PQC_STATEFUL_SIG_SIGS_LEFT = 33,
+    #undef _WC_PK_TYPE_MAX
+    #define _WC_PK_TYPE_MAX WC_PK_TYPE_PQC_STATEFUL_SIG_SIGS_LEFT
+#endif
     WC_PK_TYPE_MAX = _WC_PK_TYPE_MAX
 };
 
@@ -1574,11 +1590,9 @@ enum wc_PkType {
     enum wc_PqcKemType {
         WC_PQC_KEM_TYPE_NONE = 0,
         #define _WC_PQC_KEM_TYPE_MAX WC_PQC_KEM_TYPE_NONE
-    #if defined(WOLFSSL_HAVE_MLKEM)
         WC_PQC_KEM_TYPE_KYBER = 1,
         #undef _WC_PQC_KEM_TYPE_MAX
         #define _WC_PQC_KEM_TYPE_MAX WC_PQC_KEM_TYPE_KYBER
-    #endif
         WC_PQC_KEM_TYPE_MAX = _WC_PQC_KEM_TYPE_MAX
     };
 #endif
@@ -1599,6 +1613,25 @@ enum wc_PkType {
         #define _WC_PQC_SIG_TYPE_MAX WC_PQC_SIG_TYPE_FALCON
     #endif
         WC_PQC_SIG_TYPE_MAX = _WC_PQC_SIG_TYPE_MAX
+    };
+#endif
+
+#if defined(WOLFSSL_HAVE_LMS) || defined(WOLFSSL_HAVE_XMSS)
+    /* Post quantum stateful hash-based signature algorithms. */
+    enum wc_PqcStatefulSignatureType {
+        WC_PQC_STATEFUL_SIG_TYPE_NONE = 0,
+        #define _WC_PQC_STATEFUL_SIG_TYPE_MAX WC_PQC_STATEFUL_SIG_TYPE_NONE
+    #if defined(WOLFSSL_HAVE_LMS)
+        WC_PQC_STATEFUL_SIG_TYPE_LMS = 1,
+        #undef _WC_PQC_STATEFUL_SIG_TYPE_MAX
+        #define _WC_PQC_STATEFUL_SIG_TYPE_MAX WC_PQC_STATEFUL_SIG_TYPE_LMS
+    #endif
+    #if defined(WOLFSSL_HAVE_XMSS)
+        WC_PQC_STATEFUL_SIG_TYPE_XMSS = 2,
+        #undef _WC_PQC_STATEFUL_SIG_TYPE_MAX
+        #define _WC_PQC_STATEFUL_SIG_TYPE_MAX WC_PQC_STATEFUL_SIG_TYPE_XMSS
+    #endif
+        WC_PQC_STATEFUL_SIG_TYPE_MAX = _WC_PQC_STATEFUL_SIG_TYPE_MAX
     };
 #endif
 
@@ -2082,7 +2115,7 @@ WOLFSSL_API word32 CheckRunTimeSettings(void);
     #define WC_MP_TO_RADIX
 #endif
 
-#if defined(__GNUC__) && __GNUC__ > 5
+#if defined(__GNUC__) && (__GNUC__ > 5) && !defined(__clang__)
     #define PRAGMA_GCC_DIAG_PUSH _Pragma("GCC diagnostic push")
     #define PRAGMA_GCC(str) _Pragma(str)
     #define PRAGMA_GCC_DIAG_POP _Pragma("GCC diagnostic pop")
@@ -2309,13 +2342,15 @@ enum Max_ASN {
     DSA_INTS            =   5,     /* DSA ints in private key */
     MAX_SALT_SIZE       =  64,     /* MAX PKCS Salt length */
     MAX_IV_SIZE         =  64,     /* MAX PKCS Iv length */
-#ifdef HAVE_SPHINCS
+#ifdef WOLFSSL_HAVE_SLHDSA
+    /* Largest raw SLH-DSA signature (SHAKE-256f) is 49856 bytes; round up
+     * to leave headroom for ASN.1 wrapping (BIT STRING tag + length). */
     MAX_ENCODED_SIG_SZ  = 51200,
 #elif defined(HAVE_FALCON) || defined(HAVE_DILITHIUM)
     MAX_ENCODED_SIG_SZ  = 5120,
 #elif !defined(NO_RSA)
 #if defined(USE_FAST_MATH) && defined(FP_MAX_BITS)
-    MAX_ENCODED_SIG_SZ  = FP_MAX_BITS / 8,
+    MAX_ENCODED_SIG_SZ  = FP_MAX_BITS / 16,
 #elif (defined(WOLFSSL_SP_MATH_ALL) || defined(WOLFSSL_SP_MATH)) && \
     defined(SP_INT_BITS)
     MAX_ENCODED_SIG_SZ  = WC_BITS_TO_BYTES(SP_INT_BITS),
@@ -2362,7 +2397,7 @@ enum Max_ASN {
                             /* Maximum DER digest ASN header size */
                             /* Max X509 header length indicates the
                              * max length + 2 ('\n', '\0') */
-#if defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || defined(HAVE_SPHINCS)
+#if defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || defined(WOLFSSL_HAVE_SLHDSA)
     MAX_X509_HEADER_SZ  = (48 + 2), /* Maximum PEM Header/Footer Size */
 #else
     MAX_X509_HEADER_SZ  = (37 + 2), /* Maximum PEM Header/Footer Size */
@@ -2422,7 +2457,6 @@ enum Max_ASN {
     } CertSignCtx;
 
 #endif /* WOLFSSL_CERT_GEN */
-
 
 #ifdef __cplusplus
     }   /* extern "C" */

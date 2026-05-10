@@ -349,7 +349,11 @@
     ((defined(BUILDING_WOLFSSL) && defined(WOLFSSL_USE_OPTIONS_H)) || \
      (defined(BUILDING_WOLFSSL) && defined(WOLFSSL_OPTIONS_H) &&      \
      !defined(EXTERNAL_OPTS_OPENVPN)))
-    #warning wolfssl/options.h included in compiled wolfssl library object.
+    #if !defined(_MSC_VER) && !defined(__TASKING__)
+        #warning wolfssl/options.h included in compiled wolfssl library object.
+    #else
+        #pragma message("Warning: wolfssl/options.h included in compiled wolfssl library object.")
+    #endif
 #endif
 
 #ifdef WOLFSSL_USER_SETTINGS
@@ -369,7 +373,11 @@
      * an application build -- then your application can avoid this warning by
      * defining WOLFSSL_NO_OPTIONS_H or WOLFSSL_CUSTOM_CONFIG as appropriate.
      */
-    #warning "No configuration for wolfSSL detected, check header order"
+    #if !defined(_MSC_VER) && !defined(__TASKING__)
+        #warning "No configuration for wolfSSL detected, check header order"
+    #else
+        #pragma message("Warning: No configuration for wolfSSL detected, check header order")
+    #endif
 #endif
 
 /* Ensure WOLFSSL_DEBUG_CERTS is set when DEBUG_WOLFSSL is enabled, unless
@@ -461,7 +469,7 @@
     (WOLFSSL_FIPS_VERSION_CODE != WOLFSSL_MAKE_FIPS_VERSION3(major,minor,patch))
 
 #if defined(HAVE_FIPS) && !defined(WC_FIPS_186_5) && !defined(WC_FIPS_186_4)
-    #if FIPS_VERSION3_GE(7,0,0)
+    #if FIPS_VERSION3_GE(7,0,0) && !defined(WOLFSSL_FIPS_READY)
         #ifndef WC_FIPS_186_5
             #define WC_FIPS_186_5
         #endif
@@ -505,7 +513,7 @@
 /* old FIPS has only AES_BLOCK_SIZE. */
 #if !defined(NO_AES) && (defined(HAVE_SELFTEST) || \
      (defined(HAVE_FIPS) && FIPS_VERSION3_LT(6,0,0)))
-    #define WC_AES_BLOCK_SIZE AES_BLOCK_SIZE
+    #define WC_AES_BLOCK_SIZE 16
 #endif /* !NO_AES && (HAVE_SELFTEST || FIPS_VERSION3_LT(6,0,0)) */
 
 #ifdef WOLFSSL_HARDEN_TLS
@@ -549,6 +557,11 @@
     #undef HAVE_OID_DECODING
     #define HAVE_OID_DECODING
 #endif /* WOLFSSL_DUAL_ALG_CERTS */
+
+/* RFC 8737 id-pe-acmeIdentifier (TLS-ALPN-01) requires SHA-256. */
+#if defined(WOLFSSL_ACME_OID) && defined(NO_SHA256)
+    #undef WOLFSSL_ACME_OID
+#endif
 
 
 #if defined(_WIN32) && !defined(_M_X64) && \
@@ -769,7 +782,6 @@
      * the "enable all" feature: */
     #if defined(TEST_ESPIDF_ALL_WOLFSSL)
         #define WOLFSSL_MD2
-        #define HAVE_BLAKE2
         #define HAVE_BLAKE2B
         #define HAVE_BLAKE2S
 
@@ -921,7 +933,6 @@
     #ifdef CONFIG_ESP_WOLFSSL_ENABLE_MLKEM
         /* Kyber typically needs a minimum 10K stack */
         #define WOLFSSL_HAVE_MLKEM
-        #define WOLFSSL_WC_MLKEM
         #define WOLFSSL_SHA3
         #if defined(CONFIG_IDF_TARGET_ESP8266)
             /* With limited RAM, we'll disable some of the Kyber sizes: */
@@ -2121,6 +2132,17 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif /* FREESCALE_USE_LTC */
 
+#ifdef WOLFSSL_NXP_LPC55S6X
+    #undef  WOLFSSL_NXP_RNG_1
+    #define WOLFSSL_NXP_RNG_1
+    #define WOLFSSL_NXP_HASHCRYPT
+    #define WOLFSSL_NXP_HASHCRYPT_AES
+    #define WOLFSSL_NXP_HASHCRYPT_SHA
+    #define WOLFSSL_NXP_CASPER
+    #define WOLFSSL_NXP_CASPER_RSA_PUB_EXPTMOD
+    #define NO_WOLFSSL_SHA256_INTERLEAVE
+#endif
+
 #ifdef FREESCALE_LTC_TFM_RSA_4096_ENABLE
     #undef  USE_CERT_BUFFERS_4096
     #define USE_CERT_BUFFERS_4096
@@ -2186,10 +2208,10 @@ extern void uITRON4_free(void *p) ;
     defined(WOLFSSL_STM32L4)  || defined(WOLFSSL_STM32L5)   || \
     defined(WOLFSSL_STM32WB)  || defined(WOLFSSL_STM32H7)   || \
     defined(WOLFSSL_STM32G0)  || defined(WOLFSSL_STM32U5)   || \
-    defined(WOLFSSL_STM32H5)  || defined(WOLFSSL_STM32WL)   || \
-    defined(WOLFSSL_STM32G4)  || defined(WOLFSSL_STM32MP13) || \
-    defined(WOLFSSL_STM32H7S) || defined(WOLFSSL_STM32WBA)  || \
-    defined(WOLFSSL_STM32N6)
+    defined(WOLFSSL_STM32U3)  || defined(WOLFSSL_STM32H5)   || \
+    defined(WOLFSSL_STM32WL)  || defined(WOLFSSL_STM32G4)   || \
+    defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S) || \
+    defined(WOLFSSL_STM32WBA) || defined(WOLFSSL_STM32N6)
 
     #define SIZEOF_LONG_LONG 8
     #ifndef CHAR_BIT
@@ -2210,7 +2232,8 @@ extern void uITRON4_free(void *p) ;
 
         #if defined(WOLFSSL_STM32L4) || defined(WOLFSSL_STM32L5) || \
             defined(WOLFSSL_STM32WB) || defined(WOLFSSL_STM32U5) || \
-            defined(WOLFSSL_STM32WL) || defined(WOLFSSL_STM32WBA)
+            defined(WOLFSSL_STM32U3) || defined(WOLFSSL_STM32WL) || \
+            defined(WOLFSSL_STM32WBA)
             #define NO_AES_192 /* hardware does not support 192-bit */
         #endif
     #endif
@@ -2255,6 +2278,8 @@ extern void uITRON4_free(void *p) ;
             #include "stm32g4xx_hal.h"
         #elif defined(WOLFSSL_STM32U5)
             #include "stm32u5xx_hal.h"
+        #elif defined(WOLFSSL_STM32U3)
+            #include "stm32u3xx_hal.h"
         #elif defined(WOLFSSL_STM32H5)
             #include "stm32h5xx_hal.h"
         #elif defined(WOLFSSL_STM32N6)
@@ -2275,8 +2300,10 @@ extern void uITRON4_free(void *p) ;
         #ifndef STM32_HAL_TIMEOUT
             #define STM32_HAL_TIMEOUT   0xFF
         #endif
-        /* bypass certificate date checking, due to lack of properly configured RTC source */
-        #ifndef HAL_RTC_MODULE_ENABLED
+        /* bypass certificate date checking, due to lack of properly
+         * configured RTC source */
+        #if !defined(HAL_RTC_MODULE_ENABLED) && !defined(XTIME) && \
+            !defined(USER_TIME)
             #define NO_ASN_TIME
         #endif
 
@@ -3281,7 +3308,7 @@ extern void uITRON4_free(void *p) ;
      (defined(HAVE_ED448)      && defined(HAVE_ED448_KEY_EXPORT)) || \
      (defined(HAVE_CURVE448)   && defined(HAVE_CURVE448_KEY_EXPORT)) || \
       defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || \
-      defined(HAVE_SPHINCS) || defined(HAVE_LIBOQS))
+      defined(WOLFSSL_HAVE_SLHDSA) || defined(HAVE_LIBOQS))
     #define WC_ENABLE_ASYM_KEY_EXPORT
 #endif
 
@@ -3291,7 +3318,7 @@ extern void uITRON4_free(void *p) ;
      (defined(HAVE_ED448)      && defined(HAVE_ED448_KEY_IMPORT)) || \
      (defined(HAVE_CURVE448)   && defined(HAVE_CURVE448_KEY_IMPORT)) || \
       defined(HAVE_FALCON) || defined(HAVE_DILITHIUM) || \
-      defined(HAVE_SPHINCS) || defined(HAVE_LIBOQS))
+      defined(WOLFSSL_HAVE_SLHDSA) || defined(HAVE_LIBOQS))
     #define WC_ENABLE_ASYM_KEY_IMPORT
 #endif
 
@@ -3502,13 +3529,18 @@ extern void uITRON4_free(void *p) ;
     #undef NO_DH
 #endif
 
-/* CryptoCell defines */
-#ifdef WOLFSSL_CRYPTOCELL
-    #if defined(HAVE_ECC) && defined(HAVE_ECC_SIGN)
-        /* Don't attempt to sign/verify an all-zero digest in wolfCrypt tests */
+#ifdef HAVE_ECC
+    /* defined for all ECC non FIPS builds and for FIPS v7+ (including
+     * fips-ready/fips-dev which track the latest in-development source),
+     * unless the user explicitly opts in to allowing an all-zero digest with
+     * WC_ALLOW_ECC_ZERO_HASH or is building with HAVE_SELFTEST */
+    #if (!defined(HAVE_FIPS) || FIPS_VERSION_GT(7,0) || \
+         defined(WOLFSSL_FIPS_READY) || defined(WOLFSSL_FIPS_DEV)) && \
+        !defined(HAVE_SELFTEST) && !defined(WC_ALLOW_ECC_ZERO_HASH)
+        /* sign/verify of an all-zero digest in wolfCrypt rejected */
         #define WC_TEST_NO_ECC_SIGN_VERIFY_ZERO_DIGEST
-    #endif /* HAVE_ECC && HAVE_ECC_SIGN */
-#endif
+    #endif
+#endif /* HAVE_ECC */
 
 /* Asynchronous Crypto */
 #ifdef WOLFSSL_ASYNC_CRYPT
@@ -3534,11 +3566,6 @@ extern void uITRON4_free(void *p) ;
          * but not required */
         #define ECC_CACHE_CURVE
     #endif
-
-    #if defined(HAVE_ECC) && defined(HAVE_ECC_SIGN)
-        /* Don't attempt to sign/verify an all-zero digest in wolfCrypt tests */
-        #define WC_TEST_NO_ECC_SIGN_VERIFY_ZERO_DIGEST
-    #endif /* HAVE_ECC && HAVE_ECC_SIGN */
 
 #endif /* WOLFSSL_ASYNC_CRYPT */
 #ifndef WC_ASYNC_DEV_SIZE
@@ -3901,6 +3928,11 @@ extern void uITRON4_free(void *p) ;
     #if defined(__aarch64__) && !defined(WOLFSSL_AARCH64_PRIVILEGE_MODE)
         #define WOLFSSL_AARCH64_PRIVILEGE_MODE
     #endif
+
+    /* USE_INTEL_SPEEDUP currently gives wrong results for ML-KEM in linuxkm. */
+    #if !defined(WC_MLKEM_NO_ASM) && !defined(WC_MLKEM_KERNEL_ASM)
+        #define WC_MLKEM_NO_ASM
+    #endif
 #endif /* WOLFSSL_LINUXKM */
 
 /* FreeBSD Kernel Module */
@@ -3947,6 +3979,7 @@ extern void uITRON4_free(void *p) ;
     #undef HAVE_LIMITS_H
     #define NO_STRING_H
     #define NO_LIMITS_H
+    #define NO_STDDEF_H
     #define NO_STDLIB_H
     #define NO_STDINT_H
     #define NO_CTYPE_H
@@ -4144,6 +4177,16 @@ extern void uITRON4_free(void *p) ;
 #ifndef WOLFSSL_ALERT_COUNT_MAX
     #define WOLFSSL_ALERT_COUNT_MAX 5
 #endif
+#if WOLFSSL_ALERT_COUNT_MAX > 255
+    #error "WOLFSSL_ALERT_COUNT_MAX must be <= 255 (stored in a byte)"
+#endif
+
+#ifndef WOLFSSL_MAX_EMPTY_RECORDS
+    #define WOLFSSL_MAX_EMPTY_RECORDS 32
+#endif
+#if WOLFSSL_MAX_EMPTY_RECORDS > 255
+    #error "WOLFSSL_MAX_EMPTY_RECORDS must be <= 255 (stored in a byte)"
+#endif
 
 /* Enable blinding by default for C-only, non-small curve25519 implementation */
 #if defined(HAVE_CURVE25519) && !defined(CURVE25519_SMALL) && \
@@ -4161,7 +4204,7 @@ extern void uITRON4_free(void *p) ;
         (!defined(NO_RSA) && !defined(WC_RSA_BLINDING) && !defined(HAVE_FIPS) && \
             !defined(WC_NO_RNG))
 
-        #ifndef _MSC_VER
+        #if !defined(_MSC_VER) && !defined(__TASKING__)
             #warning "For timing resistance / side-channel attack prevention consider using harden options"
         #else
             #pragma message("Warning: For timing resistance / side-channel attack prevention consider using harden options")
@@ -4512,7 +4555,7 @@ extern void uITRON4_free(void *p) ;
 #if defined(HAVE_SECURE_RENEGOTIATION) && !defined(HAVE_EXTENDED_MASTER) && \
     (defined(HAVE_SESSION_TICKET) || !defined(NO_SESSION_CACHE))
     /* secure renegotiation requires extended master secret with resumption */
-    #ifndef _MSC_VER
+    #if !defined(_MSC_VER) && !defined(__TASKING__)
         #warning Extended master secret must be enabled with secure renegotiation and session resumption
     #else
         #pragma message("Warning: Extended master secret must be enabled with secure renegotiation and session resumption")
@@ -4543,43 +4586,21 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif
 
-#ifdef WOLFSSL_HAVE_MLKEM
-#define HAVE_PQC
+/* Falcon is the only algorithm we still pull from liboqs, so the two options
+ * go together: Falcon cannot be built without liboqs, and enabling liboqs
+ * without Falcon leaves nothing for it to do. */
+#if defined(HAVE_LIBOQS) && !defined(HAVE_FALCON)
+#error "HAVE_LIBOQS without HAVE_FALCON has no effect; enable Falcon or drop liboqs."
 #endif
-
-/* Enable Post-Quantum Cryptography if we have liboqs from the OpenQuantumSafe
- * group */
-#ifdef HAVE_LIBOQS
-#define HAVE_PQC
-#define HAVE_FALCON
-#ifndef HAVE_DILITHIUM
-    #define HAVE_DILITHIUM
-#endif
-#ifndef WOLFSSL_NO_SPHINCS
-    #define HAVE_SPHINCS
-#endif
-#ifndef WOLFSSL_HAVE_MLKEM
-    #define WOLFSSL_HAVE_MLKEM
-    #define WOLFSSL_KYBER512
-    #define WOLFSSL_KYBER768
-    #define WOLFSSL_KYBER1024
-    #define WOLFSSL_WC_ML_KEM_512
-    #define WOLFSSL_WC_ML_KEM_768
-    #define WOLFSSL_WC_ML_KEM_1024
-#endif
+#if defined(HAVE_FALCON) && !defined(HAVE_LIBOQS)
+#error "HAVE_FALCON requires HAVE_LIBOQS (enable liboqs via --with-liboqs)."
 #endif
 
 #if (defined(HAVE_LIBOQS) ||                                            \
-     defined(HAVE_LIBXMSS) ||                                           \
-     defined(HAVE_LIBLMS) ||                                            \
      defined(WOLFSSL_DUAL_ALG_CERTS) ||                                 \
      defined(HAVE_ASCON)) &&                                            \
     !defined(WOLFSSL_EXPERIMENTAL_SETTINGS)
     #error Experimental settings without WOLFSSL_EXPERIMENTAL_SETTINGS
-#endif
-
-#if defined(HAVE_PQC) && !defined(HAVE_LIBOQS) && !defined(WOLFSSL_HAVE_MLKEM)
-#error Please do not define HAVE_PQC yourself.
 #endif
 
 /* If no malloc then make sure the valid Dilithium settings are used */
@@ -4588,16 +4609,16 @@ extern void uITRON4_free(void *p) ;
     #define WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC
 #endif
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_HAVE_MLKEM) && \
+#if defined(WOLFSSL_HAVE_MLKEM) && \
     defined(WOLFSSL_DTLS13) && !defined(WOLFSSL_DTLS_CH_FRAG)
 #define WOLFSSL_DTLS_CH_FRAG
-#warning "WOLFSSL_DTLS_CH_FRAG is enabled to support PQC in DTLS 1.3"
+#warning "WOLFSSL_DTLS_CH_FRAG is enabled to support ML-KEM in DTLS 1.3"
 #endif
 #if !defined(WOLFSSL_DTLS13) && defined(WOLFSSL_DTLS_CH_FRAG)
 #error "WOLFSSL_DTLS_CH_FRAG only works with DTLS 1.3"
 #endif
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_HAVE_MLKEM) && \
+#if defined(WOLFSSL_HAVE_MLKEM) && \
     !defined(WOLFSSL_NO_ML_KEM) && !defined(WOLFSSL_PQC_HYBRIDS) && \
     defined(WOLFSSL_TLS_NO_MLKEM_STANDALONE) && !defined(WOLFCRYPT_ONLY)
 #error "Neither PQ/T hybrid combinations nor ML-KEM as standalone TLS key " \
@@ -4632,15 +4653,15 @@ extern void uITRON4_free(void *p) ;
 
 /* (D)TLS v1.3 requires 64-bit number wrappers as does XMSS and LMS. */
 #if defined(WOLFSSL_TLS13) || defined(WOLFSSL_DTLS_DROP_STATS) || \
-    (defined(WOLFSSL_WC_XMSS) && (!defined(WOLFSSL_XMSS_MAX_HEIGHT) || \
-    WOLFSSL_XMSS_MAX_HEIGHT > 32)) || (defined(WOLFSSL_WC_LMS) && \
+    (defined(WOLFSSL_HAVE_XMSS) && (!defined(WOLFSSL_XMSS_MAX_HEIGHT) || \
+    WOLFSSL_XMSS_MAX_HEIGHT > 32)) || (defined(WOLFSSL_HAVE_LMS) && \
     !defined(WOLFSSL_LMS_VERIFY_ONLY))
     #undef WOLFSSL_W64_WRAPPER
     #define WOLFSSL_W64_WRAPPER
 #endif
 
 /* wc_xmss and wc_lms require these misc.c functions. */
-#if defined(WOLFSSL_WC_XMSS) || defined(WOLFSSL_WC_LMS)
+#if defined(WOLFSSL_HAVE_XMSS) || defined(WOLFSSL_HAVE_LMS)
     #undef  WOLFSSL_NO_INT_ENCODE
     #undef  WOLFSSL_NO_INT_DECODE
 #endif
@@ -4654,6 +4675,10 @@ extern void uITRON4_free(void *p) ;
 #if defined(WOLFSSL_DTLS13) && (!defined(WOLFSSL_DTLS) || \
                                 !defined(WOLFSSL_TLS13))
 #error "DTLS v1.3 requires both WOLFSSL_TLS13 and WOLFSSL_DTLS"
+#endif
+
+#if defined(WOLFSSL_DTLS_ONLY) && !defined(WOLFSSL_DTLS)
+#error "WOLFSSL_DTLS_ONLY requires WOLFSSL_DTLS"
 #endif
 
 #if defined(WOLFSSL_QUIC) && defined(WOLFSSL_CALLBACKS)
@@ -4686,7 +4711,7 @@ extern void uITRON4_free(void *p) ;
 #if defined(WOLFSSL_SHA3) && \
     ((defined(HAVE_FIPS) && FIPS_VERSION_LE(5,2)) || \
      (defined(HAVE_SELFTEST) && \
-      !defined(WOLFSSL_HAVE_MLKEM) && !defined(WOLFSSL_WC_DILITHIUM)))
+      !defined(WOLFSSL_HAVE_MLKEM) && !defined(HAVE_DILITHIUM)))
     #undef  WOLFSSL_NO_SHAKE128
     #define WOLFSSL_NO_SHAKE128
     #undef  WOLFSSL_NO_SHAKE256
@@ -5058,6 +5083,14 @@ extern void uITRON4_free(void *p) ;
            " requires ED448 (HAVE_ED448)"
 #endif
 
+/* Accommodate legacy BLAKE gate. */
+#ifdef HAVE_BLAKE2
+    #ifndef HAVE_BLAKE2B
+        #define HAVE_BLAKE2B
+    #endif
+    #undef HAVE_BLAKE2
+#endif
+
 /* QUIC Rules */
 #if !defined(WOLFCRYPT_ONLY) && defined(WOLFSSL_QUIC) && \
     !defined(WOLFSSL_TLS13)
@@ -5092,6 +5125,14 @@ extern void uITRON4_free(void *p) ;
 #if !defined(WOLFCRYPT_ONLY) && defined(WOLFSSL_EARLY_DATA) && \
     !defined(HAVE_SESSION_TICKET) && defined(NO_PSK)
     #error "Early data requires session tickets (HAVE_SESSION_TICKET) or PSK"
+#endif
+#if !defined(WOLFCRYPT_ONLY) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    !defined(WOLFSSL_TLS13)
+    #error "cert_with_extern_psk requires TLS 1.3 (WOLFSSL_TLS13)"
+#endif
+#if !defined(WOLFCRYPT_ONLY) && defined(WOLFSSL_CERT_WITH_EXTERN_PSK) && \
+    defined(NO_PSK)
+    #error "cert_with_extern_psk requires PSK support"
 #endif
 
 /* DES3 TLS Suite Rule - auto-disable DES3 TLS suites when DES3 is disabled */

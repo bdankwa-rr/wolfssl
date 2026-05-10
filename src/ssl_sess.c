@@ -430,9 +430,15 @@ int wolfSSL_memsave_session_cache(void* mem, int sz)
 {
     int i;
     cache_header_t cache_header;
-    SessionRow*    row  = (SessionRow*)((byte*)mem + sizeof(cache_header));
+    SessionRow*    row;
 
     WOLFSSL_ENTER("wolfSSL_memsave_session_cache");
+
+    if (mem == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    row = (SessionRow*)((byte*)mem + sizeof(cache_header));
 
     if (sz < wolfSSL_get_session_cache_memsize()) {
         WOLFSSL_MSG("Memory buffer too small");
@@ -483,14 +489,52 @@ int wolfSSL_memsave_session_cache(void* mem, int sz)
 }
 
 
+#if !defined(SESSION_CACHE_DYNAMIC_MEM) && \
+    (defined(HAVE_SESSION_TICKET) || \
+    (defined(SESSION_CERTS) && defined(OPENSSL_EXTRA)))
+static void SessionSanityPointerSet(SessionRow* row)
+{
+    int j;
+
+    /* Reset pointers to safe values after raw copy */
+    for (j = 0; j < SESSIONS_PER_ROW; j++) {
+        WOLFSSL_SESSION* s = &row->Sessions[j];
+#ifdef HAVE_SESSION_TICKET
+        s->ticket = s->staticTicket;
+        s->ticketLenAlloc = 0;
+        if (s->ticketLen > SESSION_TICKET_LEN) {
+            s->ticketLen = SESSION_TICKET_LEN;
+        }
+#endif
+#if defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET) &&                 \
+    defined(WOLFSSL_TICKET_NONCE_MALLOC) &&                                    \
+    (!defined(HAVE_FIPS) || (defined(FIPS_VERSION_GE) && FIPS_VERSION_GE(5,3)))
+        s->ticketNonce.data = s->ticketNonce.dataStatic;
+        if (s->ticketNonce.len > MAX_TICKET_NONCE_STATIC_SZ) {
+            s->ticketNonce.len = MAX_TICKET_NONCE_STATIC_SZ;
+        }
+#endif
+#if defined(SESSION_CERTS) && defined(OPENSSL_EXTRA)
+        s->peer = NULL;
+#endif
+    }
+}
+#endif
+
 /* Restore the persistent session cache from memory */
 int wolfSSL_memrestore_session_cache(const void* mem, int sz)
 {
     int    i;
     cache_header_t cache_header;
-    SessionRow*    row  = (SessionRow*)((byte*)mem + sizeof(cache_header));
+    SessionRow*    row;
 
     WOLFSSL_ENTER("wolfSSL_memrestore_session_cache");
+
+    if (mem == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    row = (SessionRow*)((byte*)mem + sizeof(cache_header));
 
     if (sz < wolfSSL_get_session_cache_memsize()) {
         WOLFSSL_MSG("Memory buffer too small");
@@ -522,6 +566,11 @@ int wolfSSL_memrestore_session_cache(const void* mem, int sz)
     #endif
 
         XMEMCPY(&SessionCache[i], row++, SIZEOF_SESSION_ROW);
+    #if !defined(SESSION_CACHE_DYNAMIC_MEM) && \
+        (defined(HAVE_SESSION_TICKET) || \
+        (defined(SESSION_CERTS) && defined(OPENSSL_EXTRA)))
+        SessionSanityPointerSet(&SessionCache[i]);
+    #endif
     #ifdef ENABLE_SESSION_CACHE_ROW_LOCK
         SESSION_ROW_UNLOCK(&SessionCache[i]);
     #endif
@@ -681,6 +730,11 @@ int wolfSSL_restore_session_cache(const char *fname)
     #endif
 
         ret = (int)XFREAD(&SessionCache[i], SIZEOF_SESSION_ROW, 1, file);
+    #if !defined(SESSION_CACHE_DYNAMIC_MEM) && \
+        (defined(HAVE_SESSION_TICKET) || \
+        (defined(SESSION_CERTS) && defined(OPENSSL_EXTRA)))
+        SessionSanityPointerSet(&SessionCache[i]);
+    #endif
     #ifdef ENABLE_SESSION_CACHE_ROW_LOCK
         SESSION_ROW_UNLOCK(&SessionCache[i]);
     #endif
@@ -1544,8 +1598,12 @@ int wolfSSL_SetSession(WOLFSSL* ssl, WOLFSSL_SESSION* session)
 #if !defined(OPENSSL_EXTRA) || !defined(WOLFSSL_ERROR_CODE_OPENSSL)
         return WOLFSSL_FAILURE;  /* session timed out */
 #else /* defined(OPENSSL_EXTRA) && defined(WOLFSSL_ERROR_CODE_OPENSSL) */
+        /* Return success for OpenSSL compatibility but do not carry the
+         * expired session's version/cipher into ssl state, which would
+         * otherwise pin the ClientHello to stale values. */
         WOLFSSL_MSG("Session is expired but return success for "
                     "OpenSSL compatibility");
+        return WOLFSSL_SUCCESS;
 #endif
     }
     ssl->options.resuming = 1;
@@ -3015,6 +3073,7 @@ WOLFSSL_SESSION* wolfSSL_d2i_SSL_SESSION(WOLFSSL_SESSION** sess,
     (void)idx;
 
     if (sess != NULL) {
+        wolfSSL_FreeSession(NULL, *sess);
         *sess = s;
     }
 
@@ -3200,12 +3259,13 @@ static void SESSION_ex_data_cache_update(WOLFSSL_SESSION* session, int idx,
 
 #endif
 
-#if defined(OPENSSL_ALL) || defined(WOLFSSL_NGINX) || defined(WOLFSSL_HAPROXY) \
-    || defined(OPENSSL_EXTRA) || defined(HAVE_LIGHTY)
-
 #ifndef NO_SESSION_CACHE
+/* OpenSSL-compatible return: 1 if the session was found and removed from the
+ * internal cache, or if the external remove callback (rem_sess_cb) was
+ * invoked. 0 if neither applied (not present, or null arguments). */
 int wolfSSL_SSL_CTX_remove_session(WOLFSSL_CTX *ctx, WOLFSSL_SESSION *s)
 {
+    int found = 0;
 #if defined(HAVE_EXT_CACHE) || defined(HAVE_EX_DATA)
     int rem_called = FALSE;
 #endif
@@ -3214,7 +3274,7 @@ int wolfSSL_SSL_CTX_remove_session(WOLFSSL_CTX *ctx, WOLFSSL_SESSION *s)
 
     s = ClientSessionToSession(s);
     if (ctx == NULL || s == NULL)
-        return BAD_FUNC_ARG;
+        return 0;
 
 #ifdef HAVE_EXT_CACHE
     if (!ctx->internalCacheOff)
@@ -3231,6 +3291,7 @@ int wolfSSL_SSL_CTX_remove_session(WOLFSSL_CTX *ctx, WOLFSSL_SESSION *s)
 
         ret = TlsSessionCacheGetAndWrLock(id, &sess, &row, ctx->method->side);
         if (ret == 0 && sess != NULL) {
+            found = 1;
 #if defined(HAVE_EXT_CACHE) || defined(HAVE_EX_DATA)
             if (sess->rem_sess_cb != NULL) {
                 rem_called = TRUE;
@@ -3269,26 +3330,26 @@ int wolfSSL_SSL_CTX_remove_session(WOLFSSL_CTX *ctx, WOLFSSL_SESSION *s)
 #if defined(HAVE_EXT_CACHE) || defined(HAVE_EX_DATA)
     if (ctx->rem_sess_cb != NULL && !rem_called) {
         ctx->rem_sess_cb(ctx, s);
+        /* Assume the external cache had the session. */
+        found = 1;
     }
 #endif
 
-    /* s cannot be resumed at this point */
-    s->timeout = 0;
-
-    return 0;
+    return found;
 }
 
+#if defined(OPENSSL_ALL) || defined(WOLFSSL_NGINX) || defined(WOLFSSL_HAPROXY) \
+    || defined(OPENSSL_EXTRA) || defined(HAVE_LIGHTY)
 WOLFSSL_SESSION *wolfSSL_SSL_get0_session(const WOLFSSL *ssl)
 {
     WOLFSSL_ENTER("wolfSSL_SSL_get0_session");
 
     return ssl->session;
 }
-
-#endif /* NO_SESSION_CACHE */
-
 #endif /* OPENSSL_ALL || WOLFSSL_NGINX || WOLFSSL_HAPROXY ||
     OPENSSL_EXTRA || HAVE_LIGHTY */
+
+#endif /* NO_SESSION_CACHE */
 
 #ifdef WOLFSSL_SESSION_EXPORT
 /* Used to import a serialized TLS session.
@@ -4324,8 +4385,8 @@ int wolfSSL_SESSION_get_ex_new_index(long ctx_l,void* ctx_ptr,
         WOLFSSL_CRYPTO_EX_free* free_func)
 {
     WOLFSSL_ENTER("wolfSSL_SESSION_get_ex_new_index");
-    return wolfssl_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_SSL_SESSION, ctx_l,
-            ctx_ptr, new_func, dup_func, free_func);
+    return wolfssl_local_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_SSL_SESSION,
+            ctx_l, ctx_ptr, new_func, dup_func, free_func);
 }
 #endif /* HAVE_EX_DATA_CRYPTO */
 #endif /* HAVE_EX_DATA */

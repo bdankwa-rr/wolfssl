@@ -40,7 +40,7 @@
 #if defined(WOLFSSL_SHA384) || defined(WOLFSSL_SHA512)
     #include <wolfssl/wolfcrypt/sha512.h>
 #endif
-#if defined(HAVE_BLAKE2) || defined(HAVE_BLAKE2S)
+#if defined(HAVE_BLAKE2B) || defined(HAVE_BLAKE2S)
     #include <wolfssl/wolfcrypt/blake2.h>
 #endif
 #ifdef WOLFSSL_SHA3
@@ -131,7 +131,7 @@ typedef struct {
 #elif defined(WOLFSSL_SHA512)
     #define WC_MAX_DIGEST_SIZE WC_SHA512_DIGEST_SIZE
     #define WC_MAX_BLOCK_SIZE  WC_SHA512_BLOCK_SIZE
-#elif defined(HAVE_BLAKE2)
+#elif defined(HAVE_BLAKE2B)
     #define WC_MAX_DIGEST_SIZE BLAKE2B_OUTBYTES
     #define WC_MAX_BLOCK_SIZE  BLAKE2B_BLOCKBYTES
 #elif defined(WOLFSSL_SHA384)
@@ -310,14 +310,18 @@ WOLFSSL_API int wc_Sha384Hash_ex(const byte* data, word32 len, byte* hash,
 #ifdef WOLFSSL_SHA512
 #include <wolfssl/wolfcrypt/sha512.h>
 WOLFSSL_API int wc_Sha512Hash(const byte* data, word32 len, byte* hash);
-WOLFSSL_API int wc_Sha512_224Hash(const byte* data, word32 len, byte* hash);
-WOLFSSL_API int wc_Sha512_256Hash(const byte* data, word32 len, byte* hash);
 WOLFSSL_API int wc_Sha512Hash_ex(const byte* data, word32 len, byte* hash,
     void* heap, int devId);
-WOLFSSL_API int wc_Sha512_224Hash_ex(const byte* data, word32 len, byte* hash,
-    void* heap, int devId);
-WOLFSSL_API int wc_Sha512_256Hash_ex(const byte* data, word32 len, byte* hash,
-    void* heap, int devId);
+#ifndef WOLFSSL_NOSHA512_224
+    WOLFSSL_API int wc_Sha512_224Hash(const byte* data, word32 len, byte* hash);
+    WOLFSSL_API int wc_Sha512_224Hash_ex(const byte* data, word32 len,
+        byte* hash, void* heap, int devId);
+#endif
+#ifndef WOLFSSL_NOSHA512_256
+    WOLFSSL_API int wc_Sha512_256Hash(const byte* data, word32 len, byte* hash);
+    WOLFSSL_API int wc_Sha512_256Hash_ex(const byte* data, word32 len,
+        byte* hash, void* heap, int devId);
+#endif
 #endif /* WOLFSSL_SHA512 */
 
 #ifdef WOLFSSL_SHA3
